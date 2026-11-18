@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VEIL</title>
+<meta name="description" content="対面ごとの具体的な立ち回りをまとめた、非公式のMOBA戦術データベース(試作版・数値はサンプル)。">
+<meta property="og:title" content="VEIL — Tactical Intelligence Archive">
+<meta property="og:description" content="対面ごとの具体的な立ち回りを、ひとつの書庫に。非公式ファンプロジェクト(試作版)。">
+<meta property="og:type" content="website">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&amp;family=Shippori+Mincho+B1:wght@500;700&amp;family=Noto+Sans+JP:wght@400;500&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<a class="skip" href="#view" data-action="skip">本文へ移動</a>
+<div class="curtain" id="curtain" aria-hidden="true">
+  <svg width="64" height="64" viewBox="0 0 40 40" fill="none" stroke="#B99A68" stroke-width=".8"><path d="M20 3 L37 20 L20 37 L3 20 Z"/><path d="M20 9 C12 16 12 24 20 31 C28 24 28 16 20 9 Z"/><path d="M20 15 L20 25"/></svg>
+</div>
+<div id="app">
+  <noscript><p style="padding:40px;color:#E8E5DF">このサイトの表示にはJavaScriptが必要です。</p></noscript>
+</div>
+<div class="dialog" id="search" role="dialog" aria-modal="true" aria-label="サイト内検索">
+  <div class="box">
+    <div class="in">
+      <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20 L16.5 16.5"/></svg>
+      <label for="search-input" class="sr">キャラクター・対面・世界観を検索</label>
+      <input id="search-input" type="search" placeholder="キャラクター・対面・世界観を検索" autocomplete="off">
+      <button class="icon-btn" type="button" data-action="close-search" aria-label="検索を閉じる"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M6 6 L18 18 M18 6 L6 18"/></svg></button>
+    </div>
+    <div class="results" id="search-results"></div>
+  </div>
+</div>
+<script src="data.js"></script>
+<script src="roster.js"></script>
+<script src="adapter.js"></script>
+<script src="art.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
