@@ -531,3 +531,7 @@ a.ilink { transition: border-color .3s; } a.ilink:hover { border-color: var(--go
 .rl-note { text-align: center; font-size: 13px; }
 @media (max-width: 900px) { .rl-layout { grid-template-columns: minmax(0, 1fr); gap: 36px; } .rl-stage { order: -1; } }
 @media (max-width: 560px) { .rl-reel { --cell: 76px; } .rl-cell { padding: 0 22px; gap: 14px; } .rl-cell .portrait { width: 44px; height: 44px; } .rl-names b { font-size: 19px; } .rl-res-main h2 { font-size: 30px; } .rl-result { padding: 20px; } .rl-spin { width: 100%; min-width: 0; } }
+
+/* portrait icons cut from the hero art */
+.portrait.has-img { overflow: hidden; position: relative; background: #111114; }
+.portrait.has-img img { width: 100%; height: 100%; object-fit: cover; display: block; transform: scale(1.9); filter: saturate(.9); }

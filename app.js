@@ -38,6 +38,12 @@
     return "background: radial-gradient(ellipse 80% 60% at 50% 38%, rgba(" + rgb + ",.55), transparent 70%), radial-gradient(ellipse 120% 50% at 50% 110%, #09090B 30%, transparent 70%), linear-gradient(180deg, #1c1c22, #111114);";
   }
   function portrait(c, sm) {
+    /* with art: a zoomed crop of the hero's first picture, centred on its focus point; otherwise the class sigil */
+    var a = c && c.id ? artPool(c)[0] : null;
+    if (a) {
+      var p = (a.pos || "50% 25%").split(" ");
+      return '<span class="portrait has-img' + (sm ? " sm" : "") + '"><img src="' + esc(a.thumb || a.img) + '" alt="" loading="lazy" decoding="async" style="object-position:' + esc(a.pos || "50% 25%") + ";transform-origin:" + esc(p[0]) + " " + esc(p[1] || "25%") + '"></span>';
+    }
     return '<span class="portrait' + (sm ? " sm" : "") + '" style="' + artBg(c.rgb) + '">' + sigil(c.sigil || c.role, sm ? 24 : 30, "#E8E5DF", 2) + "</span>";
   }
 
@@ -105,11 +111,11 @@
     S.artSel = S.artSel || {};
     if (S.artSel[c.id] == null || S.artSel[c.id] >= pool.length) S.artSel[c.id] = Math.floor(Math.random() * pool.length);
     var a = pool[S.artSel[c.id]];
-    return { img: a.img, pos: a.pos, credit: a.credit, name: a.name, n: pool.length, i: S.artSel[c.id] };
+    return { img: a.img, thumb: a.thumb || a.img, pos: a.pos, credit: a.credit, name: a.name, n: pool.length, i: S.artSel[c.id] };
   }
   function champCard(c, extra) {
     return '<a class="card" href="#champion-' + c.id + '" aria-label="' + esc(c.name) + ' の詳細">' +
-      '<div class="art" style="aspect-ratio:4/5">' + (artOf(c) ? '<div class="fill"><img class="art-img" src="' + esc(artOf(c).img) + '" alt="" loading="lazy" style="object-position:' + esc(artOf(c).pos || "50% 30%") + '"></div>' : '<div class="fill" style="' + artBg(c.rgb) + '">' + sigil(c.sigil, 120) + '</div>') + '<div class="shade"></div>' +
+      '<div class="art" style="aspect-ratio:4/5">' + (artOf(c) ? '<div class="fill"><img class="art-img" src="' + esc(artOf(c).thumb) + '" alt="" loading="lazy" decoding="async" style="object-position:' + esc(artOf(c).pos || "50% 30%") + '"></div>' : '<div class="fill" style="' + artBg(c.rgb) + '">' + sigil(c.sigil, 120) + '</div>') + '<div class="shade"></div>' +
       '<span class="tag tl">' + laneLabel(c.role) + '</span>' + (artOf(c) ? "" : '<span class="tag dim tr" style="font-size:9px">ART</span>') + '</div>' +
       '<div class="cbody"><span class="cname mincho" style="font-size:26px">' + esc(c.name) + '</span><span class="ctitle serif" style="font-size:16px;letter-spacing:.04em">' + esc(c.en) + '</span>' +
       '<p class="cdesc" style="min-height:0">' + esc(c.desc) + '</p><div class="cfoot">' + laneMarks(c) +
