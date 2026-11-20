@@ -542,16 +542,28 @@
 
 
   /* ---------------- ROULETTE ---------------- */
-  /* lanes a hero can be rolled for: lanes it was played in + the usual lanes of its class (and sub-class) */
-  var CLS_LANE = { Fighter: ["EXP"], Mage: ["MID"], Marksman: ["GOLD"], Tank: ["ROAM"], Support: ["ROAM"], Assassin: ["JUNGLE"] };
+  /* lanes a hero can be rolled for: lanes it was actually played in within the most recent RL_RECENT recorded matches.
+     A lane counts only if it is the hero's most-played lane there, or was played at least RL_MIN_GAMES times and RL_MIN_SHARE of its plays (keeps one-off odd picks out). */
   var LANE_ORDER = ["EXP", "JUNGLE", "MID", "GOLD", "ROAM"];
-  function rlLanes(c) {
-    var set = {};
-    Object.keys(c.lanes || {}).forEach(function (L) { set[L] = 1; });
-    (CLS_LANE[c.cls] || []).forEach(function (L) { set[L] = 1; });
-    (CLS_LANE[c.sub] || []).forEach(function (L) { set[L] = 1; });
-    return LANE_ORDER.filter(function (L) { return set[L]; });
+  var RL_RECENT = 1000, RL_MIN_SHARE = 0.15, RL_MIN_GAMES = 2, RL_LANES = null;
+  function rlBuild() {
+    var ms = (window.VEIL_MATCHES || []).map(function (m, i) { return { m: m, i: i }; })
+      .sort(function (a, b) { return a.m.date < b.m.date ? 1 : a.m.date > b.m.date ? -1 : b.i - a.i; })
+      .slice(0, RL_RECENT), cnt = {};
+    ms.forEach(function (x) {
+      [x.m.ally, x.m.enemy].forEach(function (team) {
+        Object.keys(team || {}).forEach(function (L) { var id = team[L]; if (!id) return; cnt[id] = cnt[id] || {}; cnt[id][L] = (cnt[id][L] || 0) + 1; });
+      });
+    });
+    RL_LANES = {};
+    Object.keys(cnt).forEach(function (id) {
+      var c = cnt[id], tot = 0, max = 0;
+      Object.keys(c).forEach(function (L) { tot += c[L]; if (c[L] > max) max = c[L]; });
+      RL_LANES[id] = LANE_ORDER.filter(function (L) { return c[L] && (c[L] === max || (c[L] >= RL_MIN_GAMES && c[L] / tot >= RL_MIN_SHARE)); });
+    });
+    RL_LANES._n = ms.length;
   }
+  function rlLanes(c) { if (!RL_LANES) rlBuild(); return RL_LANES[c.id] || []; }
   var RL_KEY = "veil-roulette-exclude";
   function rlEx() { try { return JSON.parse(localStorage.getItem(RL_KEY) || "[]"); } catch (e) { return S.rlEx || []; } }
   function rlSetEx(a) { S.rlEx = a; try { localStorage.setItem(RL_KEY, JSON.stringify(a)); } catch (e) {} }
@@ -591,7 +603,7 @@
     return '<div class="rl-result rise" style="--rgb:' + c.rgb + '"><span class="eyebrow mono gold">TODAY\'S PICK</span>' +
       '<div class="rl-res-main">' + portrait(c) + '<div><h2 class="serif">' + esc(c.name) + '</h2><span class="mono muted">' + esc(c.en) + "</span></div></div>" +
       (lane ? '<p class="rl-lane"><span class="mono muted">LANE</span><b class="serif">' + laneLabel(lane) + "</b></p>" : "") +
-      '<dl class="rl-facts"><div><dt>クラス</dt><dd>' + esc(cls[c.cls] || c.cls) + (c.sub ? " / " + esc(cls[c.sub] || c.sub) : "") + '</dd></div><div><dt>入れるレーン</dt><dd>' + ls.map(laneLabel).join("・") + "</dd></div></dl>" +
+      '<dl class="rl-facts"><div><dt>クラス</dt><dd>' + esc(cls[c.cls] || c.cls) + (c.sub ? " / " + esc(cls[c.sub] || c.sub) : "") + '</dd></div><div><dt>直近の記録で使われたレーン</dt><dd>' + (ls.length ? ls.map(laneLabel).join("・") : '<span class="muted">記録なし</span>') + "</dd></div></dl>" +
       '<div class="rl-actions"><a class="btn primary" href="#champion-' + c.id + '">詳細を見る' + IC.arrow + '</a>' +
       '<button class="btn ghost" type="button" data-action="rl-spin">もう一回</button>' +
       '<button class="btn ghost" type="button" data-action="rl-ex" data-id="' + c.id + '">候補から外す</button></div></div>';
@@ -608,7 +620,7 @@
       '<label class="rl-toggle"><input type="checkbox" data-action="rl-lanetoo"' + (f.laneToo ? " checked" : "") + '><span>レーンが ALL のとき、レーンも一緒に決める</span></label>' +
       '</div></div>' +
       '<div class="rl-exbox"><span class="mono gold" style="font-size:10px">EXCLUDED · 候補から外しているヒーロー</span><div id="rl-ex">' + rlExList() + "</div></div>" +
-      '<p class="sample-note">「入れるレーン」は、記録した試合で使われたレーンと、クラスの定番レーン(ファイター=EXP、メイジ=MID、マークスマン=GOLD、タンク・サポート=ROAM、アサシン=JUNGLE)を合わせた目安です。外したヒーローはこのブラウザに保存されます。</p></div>' +
+      '<p class="sample-note">レーンは、直近に登録された' + RL_RECENT + '試合(今は' + (rlLanes(D.champions[0]), RL_LANES._n) + '試合)で、そのヒーローが実際に使われたレーンだけです。一番多く使われたレーン以外は、' + RL_MIN_GAMES + '回以上かつそのヒーローの記録の' + Math.round(RL_MIN_SHARE * 100) + '%以上使われたときだけ入れます。たまたま1回だけ使われたようなレーンは出ません。直近の記録がないヒーローは、レーンを選ぶと候補から外れます。外したヒーローはこのブラウザに保存されます。</p></div>' +
       '<div class="rl-stage"><div class="rl-reel" aria-hidden="true"><span class="rl-mark l"></span><span class="rl-mark r"></span><div id="rl-strip-wrap">' + rlReelIdle() + "</div></div>" +
       '<button id="rl-spin" class="btn primary rl-spin" type="button" data-action="rl-spin"' + (rlPool().length ? "" : " disabled") + '>ルーレットを回す' + IC.arrow + "</button>" +
       '<div id="rl-out" aria-live="polite">' + (f.last && CH[f.last.id] ? rlResult(CH[f.last.id], f.last.lane) : "") + "</div></div>" +
