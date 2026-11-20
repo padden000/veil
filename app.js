@@ -8,6 +8,7 @@
   var S = {
     cf: { q: "", role: "ALL", diff: "ALL", attr: "ALL", sort: "games" },
     lab: { you: "", enemy: "", lane: "EXP" },
+    rl: { lane: "ALL", cls: "ALL", laneToo: true, last: null, spinning: false },
     meta: { role: "ALL", key: "games", dir: -1 },
     secrets: {}
   };
@@ -15,6 +16,7 @@
   /* ---------------- helpers ---------------- */
   function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (m) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m]; }); }
   var IC = {
+    dice: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2.5"/><circle cx="9" cy="9" r="1.1" fill="currentColor" stroke="none"/><circle cx="15" cy="15" r="1.1" fill="currentColor" stroke="none"/><circle cx="15" cy="9" r="1.1" fill="currentColor" stroke="none"/><circle cx="9" cy="15" r="1.1" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.1" fill="currentColor" stroke="none"/></svg>',
     arrow: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M4 12 H20 M14 6 L20 12 L14 18"/></svg>',
     search: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20 L16.5 16.5"/></svg>',
     chev: '<svg class="ic chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M6 9 L12 15 L18 9"/></svg>',
@@ -224,7 +226,7 @@
       [["name", "名前順"], ["en", "英語名順"], ["games", "試合数が多い順"], ["wr", "勝率が高い順"]].map(function (o) { return '<option value="' + o[0] + '"' + (o[0] === f.sort ? " selected" : "") + ">" + o[1] + "</option>"; }).join("") + "</select>" + IC.chev + "</div></div>" +
       '<div class="fgroups"><div class="fgroup" role="group" aria-label="レーン"><span class="mono gold" style="font-size:10px">LANE</span>' + chips("role", [["ALL", "ALL"]].concat(D.roles.map(function (r) { return [r.id, r.id]; })), f.role) + "</div>" +
       '<div class="fgroup" role="group" aria-label="クラス"><span class="mono gold" style="font-size:10px">CLASS</span>' + chips("diff", [["ALL", "ALL"]].concat(Object.keys(cls).map(function (k) { return [k, cls[k]]; })), f.diff) + "</div></div></div>" +
-      '<p class="sample-note">レーンは記録した試合で実際に使われたレーンです。カード右下の記号は、一番多く使われたレーンが金色、ほかに使われたレーンが灰色です。</p>' +
+      '<a class="rl-cta" href="#roulette">' + IC.dice + '<span><b>使うヒーローに迷ったら</b><span class="muted">条件をしぼってルーレットで決める</span></span>' + IC.arrow + '</a><p class="sample-note">レーンは記録した試合で実際に使われたレーンです。カード右下の記号は、一番多く使われたレーンが金色、ほかに使われたレーンが灰色です。</p>' +
       '<div id="champ-grid" aria-live="polite">' + champGrid() + "</div></div></section>";
   }
 
@@ -538,17 +540,120 @@
     return '<section class="section"><div class="wrap"><div class="empty"><span class="tag warn">ERROR</span><h3>ページが見つかりません</h3><p class="muted" style="font-size:14px">' + esc(msg || "リンクが古いか、入力に誤りがあります。") + '</p><a class="btn ghost" href="#home">HOME へ戻る</a></div></div></section>';
   }
 
+
+  /* ---------------- ROULETTE ---------------- */
+  /* lanes a hero can be rolled for: lanes it was played in + the usual lanes of its class (and sub-class) */
+  var CLS_LANE = { Fighter: ["EXP"], Mage: ["MID"], Marksman: ["GOLD"], Tank: ["ROAM"], Support: ["ROAM"], Assassin: ["JUNGLE"] };
+  var LANE_ORDER = ["EXP", "JUNGLE", "MID", "GOLD", "ROAM"];
+  function rlLanes(c) {
+    var set = {};
+    Object.keys(c.lanes || {}).forEach(function (L) { set[L] = 1; });
+    (CLS_LANE[c.cls] || []).forEach(function (L) { set[L] = 1; });
+    (CLS_LANE[c.sub] || []).forEach(function (L) { set[L] = 1; });
+    return LANE_ORDER.filter(function (L) { return set[L]; });
+  }
+  var RL_KEY = "veil-roulette-exclude";
+  function rlEx() { try { return JSON.parse(localStorage.getItem(RL_KEY) || "[]"); } catch (e) { return S.rlEx || []; } }
+  function rlSetEx(a) { S.rlEx = a; try { localStorage.setItem(RL_KEY, JSON.stringify(a)); } catch (e) {} }
+  function rlPool() {
+    var ex = rlEx(), f = S.rl;
+    return D.champions.filter(function (c) {
+      if (ex.indexOf(c.id) >= 0) return false;
+      if (f.cls !== "ALL" && c.cls !== f.cls && c.sub !== f.cls) return false;
+      if (f.lane !== "ALL" && rlLanes(c).indexOf(f.lane) < 0) return false;
+      return true;
+    });
+  }
+  function rlCell(c) {
+    return '<div class="rl-cell">' + portrait(c) + '<span class="rl-names"><b class="serif">' + esc(c.name) + '</b><span class="mono muted">' + esc(c.en) + "</span></span></div>";
+  }
+  function rlReelIdle() {
+    var pool = rlPool();
+    if (!pool.length) return '<div class="rl-strip"><div class="rl-cell rl-empty"><span class="muted">候補がいません</span></div></div>';
+    var a = []; for (var i = 0; i < 3; i++) a.push(pool[Math.floor(Math.random() * pool.length)]);
+    return '<div class="rl-strip">' + a.map(rlCell).join("") + "</div>";
+  }
+  function rlCount() {
+    var n = rlPool().length;
+    document.querySelectorAll("[data-rl-count]").forEach(function (el) { el.textContent = n; });
+    var b = document.getElementById("rl-spin"); if (b) b.disabled = !n || S.rl.spinning;
+    return n;
+  }
+  function rlExList() {
+    var ex = rlEx();
+    if (!ex.length) return '<p class="muted" style="font-size:13px">外しているヒーローはいません。結果に出たヒーローを「候補から外す」で外せます。</p>';
+    return '<div class="rl-exlist">' + ex.map(function (id) { var c = CH[id]; if (!c) return ""; return '<button type="button" class="chip" data-action="rl-unex" data-id="' + id + '" aria-label="' + esc(c.name) + ' を候補に戻す">' + esc(c.name) + ' <span aria-hidden="true">×</span></button>'; }).join("") +
+      '</div><button type="button" class="linkbtn mono" data-action="rl-unex-all">全員を候補に戻す</button>';
+  }
+  function rlResult(c, lane) {
+    if (!c) return "";
+    var ls = rlLanes(c), cls = window.VEIL_CLS_JP || {};
+    return '<div class="rl-result rise" style="--rgb:' + c.rgb + '"><span class="eyebrow mono gold">TODAY\'S PICK</span>' +
+      '<div class="rl-res-main">' + portrait(c) + '<div><h2 class="serif">' + esc(c.name) + '</h2><span class="mono muted">' + esc(c.en) + "</span></div></div>" +
+      (lane ? '<p class="rl-lane"><span class="mono muted">LANE</span><b class="serif">' + laneLabel(lane) + "</b></p>" : "") +
+      '<dl class="rl-facts"><div><dt>クラス</dt><dd>' + esc(cls[c.cls] || c.cls) + (c.sub ? " / " + esc(cls[c.sub] || c.sub) : "") + '</dd></div><div><dt>入れるレーン</dt><dd>' + ls.map(laneLabel).join("・") + "</dd></div></dl>" +
+      '<div class="rl-actions"><a class="btn primary" href="#champion-' + c.id + '">詳細を見る' + IC.arrow + '</a>' +
+      '<button class="btn ghost" type="button" data-action="rl-spin">もう一回</button>' +
+      '<button class="btn ghost" type="button" data-action="rl-ex" data-id="' + c.id + '">候補から外す</button></div></div>';
+  }
+  function viewRoulette() {
+    var f = S.rl, cls = window.VEIL_CLS_JP || {};
+    return '<section class="phead">' + atmo({ h: 260, seed: 47 }) + '<div class="wrap">' + crumbs([["HOME", "#home"], ["CHAMPIONS", "#champions"], ["ROULETTE"]]) +
+      '<div class="phead-row"><div style="display:flex;flex-direction:column;gap:14px"><h1 class="rise">ROULETTE</h1><p class="jp rise d1">使うヒーローに迷ったら、運命に任せる。</p></div>' +
+      '<div style="display:flex;align-items:baseline;gap:12px"><span class="serif gold num" style="font-size:64px;line-height:1" data-rl-count>' + rlPool().length + '</span><span class="mono muted">体が候補</span></div></div></div></section>' +
+      '<section class="section tight" style="padding-top:40px"><div class="wrap rl-layout">' +
+      '<div class="rl-side"><div class="filters"><div class="fgroups" style="flex-direction:column;gap:20px">' +
+      '<div class="fgroup" role="group" aria-label="レーンで絞る"><span class="mono gold" style="font-size:10px">LANE</span>' + chips("rl-lane", [["ALL", "ALL"]].concat(LANE_ORDER.map(function (L) { return [L, L]; })), f.lane) + "</div>" +
+      '<div class="fgroup" role="group" aria-label="クラスで絞る"><span class="mono gold" style="font-size:10px">CLASS</span>' + chips("rl-cls", [["ALL", "ALL"]].concat(Object.keys(cls).map(function (k) { return [k, cls[k]]; })), f.cls) + "</div>" +
+      '<label class="rl-toggle"><input type="checkbox" data-action="rl-lanetoo"' + (f.laneToo ? " checked" : "") + '><span>レーンが ALL のとき、レーンも一緒に決める</span></label>' +
+      '</div></div>' +
+      '<div class="rl-exbox"><span class="mono gold" style="font-size:10px">EXCLUDED · 候補から外しているヒーロー</span><div id="rl-ex">' + rlExList() + "</div></div>" +
+      '<p class="sample-note">「入れるレーン」は、記録した試合で使われたレーンと、クラスの定番レーン(ファイター=EXP、メイジ=MID、マークスマン=GOLD、タンク・サポート=ROAM、アサシン=JUNGLE)を合わせた目安です。外したヒーローはこのブラウザに保存されます。</p></div>' +
+      '<div class="rl-stage"><div class="rl-reel" aria-hidden="true"><span class="rl-mark l"></span><span class="rl-mark r"></span><div id="rl-strip-wrap">' + rlReelIdle() + "</div></div>" +
+      '<button id="rl-spin" class="btn primary rl-spin" type="button" data-action="rl-spin"' + (rlPool().length ? "" : " disabled") + '>ルーレットを回す' + IC.arrow + "</button>" +
+      '<div id="rl-out" aria-live="polite">' + (f.last && CH[f.last.id] ? rlResult(CH[f.last.id], f.last.lane) : "") + "</div></div>" +
+      "</div></section>";
+  }
+  function rlSpin() {
+    var pool = rlPool(); if (!pool.length || S.rl.spinning) return;
+    var prev = S.rl.last && S.rl.last.id, cand = pool.length > 1 ? pool.filter(function (c) { return c.id !== prev; }) : pool;
+    var win = cand[Math.floor(Math.random() * cand.length)];
+    var lane = S.rl.lane !== "ALL" ? S.rl.lane : (S.rl.laneToo ? (function (l) { return l[Math.floor(Math.random() * l.length)]; })(rlLanes(win)) : null);
+    S.rl.last = { id: win.id, lane: lane };
+    var out = document.getElementById("rl-out"), wrap = document.getElementById("rl-strip-wrap");
+    var reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (!wrap || reduce) { if (wrap) wrap.innerHTML = '<div class="rl-strip">' + rlCell(pool[Math.floor(Math.random() * pool.length)]) + rlCell(win) + rlCell(pool[Math.floor(Math.random() * pool.length)]) + "</div>"; if (out) out.innerHTML = rlResult(win, lane); return; }
+    var N = 34, cells = [];
+    for (var i = 0; i < N; i++) cells.push(pool[Math.floor(Math.random() * pool.length)]);
+    cells.push(win); cells.push(pool[Math.floor(Math.random() * pool.length)]);
+    wrap.innerHTML = '<div class="rl-strip spinning">' + cells.map(rlCell).join("") + "</div>";
+    var strip = wrap.firstChild, cellH = strip.firstChild.getBoundingClientRect().height;
+    var target = (N - 1) * cellH; /* winner sits in the middle row */
+    S.rl.spinning = true; rlCount(); if (out) out.innerHTML = "";
+    document.querySelector(".rl-reel").classList.remove("landed");
+    strip.style.transform = "translateY(0)";
+    void strip.offsetHeight;
+    strip.style.transition = "transform 3.6s cubic-bezier(.12,.72,.08,1)";
+    strip.style.transform = "translateY(" + (-target) + "px)";
+    setTimeout(function () {
+      S.rl.spinning = false; rlCount();
+      var reel = document.querySelector(".rl-reel"); if (reel) reel.classList.add("landed");
+      var o = document.getElementById("rl-out"); if (o && S.rl.last && S.rl.last.id === win.id) o.innerHTML = rlResult(win, lane);
+      if (o) { var rb = o.getBoundingClientRect(); if (rb.top > window.innerHeight - 120) o.scrollIntoView({ block: "nearest", behavior: "smooth" }); }
+    }, 3700);
+  }
+
   /* ---------------- layout ---------------- */
   var NAV = [["home", "HOME"], ["champions", "CHAMPIONS"], ["equipment", "EQUIPMENT"], ["matchup", "MATCHUP LAB"], ["patch", "PATCH &amp; META"], ["lore", "LORE ARCHIVE"]];
   function header(cur) {
     return '<header class="site-header"><div class="wrap"><a class="logo" href="#home">' + LOGO + "<span>VEIL</span></a>" +
       '<nav class="nav" id="main-nav" aria-label="メインナビゲーション">' + NAV.map(function (n) { return '<a href="#' + n[0] + '"' + (cur === n[0] ? ' aria-current="page"' : "") + ">" + n[1] + "</a>"; }).join("") + "</nav>" +
-      '<div class="head-tools"><span class="tag demo-pill">DEMO DATA</span><button class="icon-btn" type="button" data-action="open-search" aria-label="サイト内検索">' + IC.search + '</button><button class="icon-btn menu-btn" type="button" data-action="menu" aria-label="メニューを開く" aria-expanded="false" aria-controls="main-nav">' + IC.menu + "</button></div></div></header>";
+      '<div class="head-tools"><span class="tag demo-pill">DEMO DATA</span><a class="icon-btn' + (cur === "roulette" ? " on" : "") + '" href="#roulette" aria-label="ヒーロールーレット" title="ヒーロールーレット">' + IC.dice + '</a><button class="icon-btn" type="button" data-action="open-search" aria-label="サイト内検索">' + IC.search + '</button><button class="icon-btn menu-btn" type="button" data-action="menu" aria-label="メニューを開く" aria-expanded="false" aria-controls="main-nav">' + IC.menu + "</button></div></div></header>";
   }
   function footer() {
     return '<footer class="site-footer"><div class="wrap top"><div style="display:flex;flex-direction:column;gap:16px"><a class="logo" href="#home">' + LOGO + "<span>VEIL</span></a>" +
       '<p class="disclaimer">本サイトはMoontonとは無関係の非公式ファンサイトです。Mobile Legends: Bang Bang、ヒーロー名、アートワーク等の権利はMoontonに帰属します。掲載中のキャラクター・数値はすべて開発用のサンプル(DEMO)です。</p></div>' +
-      '<div class="cols"><div class="col"><span class="mono gold">DATABASE</span><a href="#champions">キャラクター図鑑</a><a href="#equipment">装備一覧</a><a href="#matchup">対面攻略</a><a href="#patch">パッチ・メタ</a></div><div class="col"><span class="mono gold">ARCHIVE</span><a href="#lore">世界観</a><a href="#home">HOME</a></div></div></div>' +
+      '<div class="cols"><div class="col"><span class="mono gold">DATABASE</span><a href="#champions">キャラクター図鑑</a><a href="#roulette">ヒーロールーレット</a><a href="#equipment">装備一覧</a><a href="#matchup">対面攻略</a><a href="#patch">パッチ・メタ</a></div><div class="col"><span class="mono gold">ARCHIVE</span><a href="#lore">世界観</a><a href="#home">HOME</a></div></div></div>' +
       '<div class="wrap bottom"><span class="mono muted">EVERY BATTLE LEAVES A TRACE.</span><span class="mono muted">VEIL · PROTOTYPE v0.2</span></div></footer>';
   }
 
@@ -558,6 +663,7 @@
     var m;
     if (h === "home") return { nav: "home", html: viewHome() };
     if (h === "champions") return { nav: "champions", html: viewChampions() };
+    if (h === "roulette") return { nav: "roulette", html: viewRoulette() };
     if ((m = h.match(/^champion-([a-z]+)$/))) return { nav: "champions", html: viewChampion(m[1]) };
     if (h === "equipment") return { nav: "equipment", html: viewEquipment() };
     if ((m = h.match(/^item-([a-z]+)$/))) return { nav: "equipment", html: viewItem(m[1]) };
@@ -574,7 +680,7 @@
     app.innerHTML = header(r.nav) + '<main id="view" tabindex="-1">' + r.html + "</main>" + footer();
     if (r.focus) { var el = document.getElementById(r.focus); if (el) setTimeout(function () { el.scrollIntoView({ block: "center" }); }, 60); }
     else if (!keepScroll) window.scrollTo(0, 0);
-    var titles = { home: "VEIL", champions: "CHAMPIONS — VEIL", equipment: "EQUIPMENT — VEIL", matchup: "MATCHUP LAB — VEIL", lore: "LORE ARCHIVE — VEIL", patch: "PATCH & META — VEIL" };
+    var titles = { roulette: "ROULETTE — VEIL", home: "VEIL", champions: "CHAMPIONS — VEIL", equipment: "EQUIPMENT — VEIL", matchup: "MATCHUP LAB — VEIL", lore: "LORE ARCHIVE — VEIL", patch: "PATCH & META — VEIL" };
     document.title = titles[r.nav] || "VEIL";
   }
   function go(hash) { if (location.hash === hash) render(); else location.hash = hash; }
@@ -589,9 +695,15 @@
       document.querySelectorAll(".dbg img, .dbody-art").forEach(function (im) { im.src = A2.img; im.style.objectPosition = pos2; });
       var cr = document.querySelector(".dbg-credit"); if (cr) cr.textContent = (A2.name ? A2.name + " · " : "") + (A2.credit || "© MOONTON");
       t.textContent = "SKIN " + (A2.i + 1) + " / " + A2.n + " ↻"; return; }
+    if (act === "rl-spin") { if (!document.getElementById("rl-strip-wrap")) return; rlSpin(); return; }
+    if (act === "rl-ex") { var ex = rlEx(), xid = t.getAttribute("data-id"); if (ex.indexOf(xid) < 0) ex.push(xid); rlSetEx(ex); S.rl.last = null; document.getElementById("rl-out").innerHTML = '<p class="muted rl-note">' + esc(CH[xid].name) + ' を候補から外しました。</p>'; document.getElementById("rl-ex").innerHTML = rlExList(); rlCount(); return; }
+    if (act === "rl-unex") { rlSetEx(rlEx().filter(function (x) { return x !== t.getAttribute("data-id"); })); document.getElementById("rl-ex").innerHTML = rlExList(); rlCount(); return; }
+    if (act === "rl-unex-all") { rlSetEx([]); document.getElementById("rl-ex").innerHTML = rlExList(); rlCount(); return; }
+    if (act === "rl-lanetoo") { S.rl.laneToo = t.checked; return; }
     if (act === "skip") { ev.preventDefault(); var mv = document.getElementById("view"); if (mv) mv.focus(); return; }
     if (act === "filter") {
       var g = t.getAttribute("data-group"), v = t.getAttribute("data-value");
+      if (g === "rl-lane" || g === "rl-cls") { S.rl[g === "rl-lane" ? "lane" : "cls"] = v; document.querySelectorAll('[data-group="' + g + '"]').forEach(function (b) { b.setAttribute("aria-pressed", String(b.getAttribute("data-value") === v)); }); if (!S.rl.spinning) document.getElementById("rl-strip-wrap").innerHTML = rlReelIdle(); rlCount(); return; }
       if (g === "icat" || g === "idmg") { S.itf[g === "icat" ? "cat" : "dmg"] = v; document.querySelectorAll('[data-group="' + g + '"]').forEach(function (b) { b.setAttribute("aria-pressed", String(b.getAttribute("data-value") === v)); }); document.getElementById("item-grid").innerHTML = itemGrid(); return; }
       if (g === "meta-role") { S.meta.role = v; document.querySelectorAll('[data-group="meta-role"]').forEach(function (b) { b.setAttribute("aria-pressed", String(b.getAttribute("data-value") === v)); }); document.getElementById("meta-table").innerHTML = metaTable(); return; }
       S.cf[g] = v;
