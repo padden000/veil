@@ -3,7 +3,7 @@
   --bg: #09090B; --bg2: #111114; --card: #17171C; --line: #303037;
   --text: #E8E5DF; --sub: #85838A; --mid: #B4B1AA;
   --gold: #B99A68; --gold2: #C9AB79; --red: #71202A; --redtext: #CF7D85; --steel: #65717D; --steeltext: #8E9AA6;
-  --serif: 'Cormorant Garamond', 'Shippori Mincho B1', serif;
+  --serif: 'Bodoni Moda', 'Cormorant Garamond', 'Shippori Mincho B1', serif; /* Bodoni Moda is loaded with digits only, so letters fall through to Cormorant */
   --mincho: 'Shippori Mincho B1', 'Hiragino Mincho ProN', serif;
   --sans: 'Noto Sans JP', system-ui, sans-serif;
   --mono: 'IBM Plex Mono', ui-monospace, monospace;
