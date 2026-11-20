@@ -310,7 +310,7 @@
       '<div class="block" ' + P("sec-skills") + '><h2>SKILLS <small>スキル</small></h2><div>' + skillSlots + "</div></div>" +
 
       '<div class="block" ' + P("sec-build") + '><h2>BUILD <small>ビルド</small></h2>' + prep("おすすめ・直近の人気・フル火力・バランス・フル防具のビルドを、ここに表示します。") +
-      '<div class="loadout"><div id="emb-box" class="embwrap">' + embBox(c) + '</div><div class="item"><b>SPELL · バトルスペル</b><span class="muted">準備中</span></div></div></div>' +
+      '<div class="loadout"><div id="emb-box" class="embwrap">' + embBox(c) + '</div><div class="item"><b>SPELL · バトルスキル</b><span class="muted" style="font-size:13px">このヒーローのおすすめはデータ待ちです</span><a class="link" href="#spells" style="padding:0">バトルスキルの一覧を見る' + IC.arrow + '</a></div></div></div>' +
 
       '<div class="block" ' + P("sec-matchups") + '><h2>MATCHUPS <small>' + laneLabel(c.role) + ' での対戦成績</small></h2><div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:24px">' +
       '<div style="display:flex;flex-direction:column;gap:12px"><span class="mono gold" style="font-size:10px">勝ち越している相手</span>' + muList(c.strong) + "</div>" +
@@ -380,63 +380,96 @@
       '<h3 class="subh">ランク帯ごとの成績</h3><div class="table-box"><table class="data" style="min-width:360px"><thead><tr><th>ランク帯</th><th>試合数</th><th>勝率</th></tr></thead><tbody>' + rankRows + "</tbody></table></div>";
   }
 
-  /* ---------------- EQUIPMENT ---------------- */
-  var CAT = { atk: "攻撃", def: "防御", boots: "移動" };
-  var ITEM_ICON = {
-    atk: "M18 82 L70 30 M62 22 L78 38 M24 66 L34 76 M70 30 L82 18",
-    def: "M50 14 L78 26 V50 C78 68 64 80 50 86 C36 80 22 68 22 50 V26 Z M50 30 V70",
-    boots: "M34 16 V58 L22 72 V82 H76 V72 C76 64 64 62 54 60 V16 Z M34 40 H54"
-  };
-  function itemIcon(id, size) {
-    var it = window.VEIL_ITEMS[id], col = it.cat === "atk" ? "#CF7D85" : it.cat === "def" ? "#8E9AA6" : "#B99A68";
-    return '<span class="iicon" style="width:' + size + "px;height:" + size + 'px"><svg width="' + Math.round(size * .6) + '" height="' + Math.round(size * .6) + '" viewBox="0 0 100 100" fill="none" stroke="' + col + '" stroke-width="3" aria-hidden="true"><path d="' + ITEM_ICON[it.cat] + '"/></svg></span>';
+  /* ---------------- EQUIPMENT · EMBLEM · SPELLS (real data from gear.js) ---------------- */
+  var G = window.VEIL_GEAR || { items: {}, cats: [], emblems: [], talents: [], spells: [] };
+  var CAT = {}; G.cats.forEach(function (c) { CAT[c[0]] = c[1]; });
+  function gicon(src, size, alt) {
+    return '<span class="gicon" style="width:' + size + "px;height:" + size + 'px"><img src="' + esc(src) + '" alt="' + esc(alt || "") + '" width="' + size + '" height="' + size + '" loading="lazy" decoding="async"></span>';
+  }
+  function itemIcon(id, size) { return gicon("icons/i-" + id + ".webp", size); }
+  function gearSource() {
+    return '<p class="sample-note">ゲーム内の画面から書き写した内容です(文章・アイコン © MOONTON)。ゲーム側の表示が途中で切れていた説明は「…」で終わり、続きは準備中です。</p>';
+  }
+  function gearTabs(cur) {
+    return '<nav class="gtabs" aria-label="装備とエンブレム">' + [["equipment", "装備", "EQUIPMENT"], ["emblem", "エンブレム・天賦", "EMBLEM"], ["spells", "バトルスキル", "SPELLS"]].map(function (t) {
+      return '<a href="#' + t[0] + '"' + (cur === t[0] ? ' aria-current="page"' : "") + '><span class="mono" style="font-size:10px">' + t[2] + "</span>" + t[1] + "</a>"; }).join("") + "</nav>";
   }
   function usersOf(id) {
-    return D.champions.filter(function (c) { return c.build.indexOf(id) >= 0; }).map(function (c) { return { c: c, rec: true }; });
+    return D.champions.filter(function (c) { return (c.build || []).indexOf(id) >= 0; }).map(function (c) { return { c: c, rec: true }; });
   }
+  function catCount(cat) { return Object.keys(G.items).filter(function (id) { return G.items[id].cats.indexOf(cat) >= 0; }).length; }
+  function catLabel(it) { return it.cats.map(function (c) { return CAT[c]; }).join("・"); }
+  function priceOf(it, hi) { return it.price != null ? it.price : (hi ? Infinity : -1); }
   function filteredItems() {
-    var f = S.itf || { q: "", cat: "ALL", dmg: "ALL" }, q = f.q.trim();
-    return Object.keys(window.VEIL_ITEMS).filter(function (id) {
-      var it = window.VEIL_ITEMS[id];
-      return (f.cat === "ALL" || it.cat === f.cat) && (f.dmg === "ALL" || it.dmg === f.dmg) && (!q || D.items[id].indexOf(q) >= 0 || it.desc.indexOf(q) >= 0);
+    var f = S.itf || { q: "", cat: "ALL", sort: "price" }, q = f.q.trim();
+    var list = Object.keys(G.items).filter(function (id) {
+      var it = G.items[id], hay = it.name + it.tag + it.stats.join("") + it.passive;
+      return (f.cat === "ALL" || it.cats.indexOf(f.cat) >= 0) && (!q || hay.indexOf(q) >= 0);
     });
+    return list.sort(function (a, b) { var A = G.items[a], B = G.items[b]; return f.sort === "name" ? A.name.localeCompare(B.name, "ja") : f.sort === "cheap" ? priceOf(A, 1) - priceOf(B, 1) : priceOf(B) - priceOf(A); });
   }
   function itemGrid() {
-    var list = filteredItems();
+    var list = filteredItems(), f = S.itf || {};
     document.querySelectorAll("[data-icount]").forEach(function (el) { el.textContent = list.length; });
+    if (f.cat && f.cat !== "ALL" && !catCount(f.cat)) return '<div class="empty"><h3>' + esc(CAT[f.cat]) + 'の装備は準備中です</h3><p class="muted" style="font-size:14px">まだゲーム画面を撮っていない種類です。画面をもらえれば追加します。</p></div>';
     if (!list.length) return '<div class="empty"><h3>該当する装備はありません</h3><p class="muted" style="font-size:14px">条件を減らすか、別の言葉で検索してください。</p><button class="btn ghost" type="button" data-action="reset-items">条件をリセット</button></div>';
-    var SL = window.VEIL_SLOTS || { itemCost: {} };
     return '<div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:20px">' + list.map(function (id) {
-      var it = window.VEIL_ITEMS[id], n = usersOf(id).length, cost = SL.itemCost[id];
-      return '<a class="card icard" href="#item-' + id + '"><div class="icard-top">' + itemIcon(id, 56) + '<div style="display:flex;flex-direction:column;gap:4px;min-width:0"><span class="mincho" style="font-size:19px">' + esc(D.items[id]) + '</span><span class="mono muted" style="font-size:10px">' + CAT[it.cat] + (it.dmg ? " · " + it.dmg : "") + "</span></div></div>" +
-        '<p class="cdesc" style="min-height:0">' + esc(it.desc) + '</p><div class="cfoot"><span class="mono muted" style="font-size:10px">使うキャラ ' + n + '体</span><span class="mono muted" style="font-size:10px">価格 ' + (cost != null ? cost.toLocaleString() : "—") + "</span></div></a>";
+      var it = G.items[id];
+      return '<a class="card icard" href="#item-' + id + '"><div class="icard-top">' + itemIcon(id, 60) + '<div style="display:flex;flex-direction:column;gap:4px;min-width:0"><span class="mincho" style="font-size:19px">' + esc(it.name) + '</span><span class="mono muted" style="font-size:10px">' + esc(catLabel(it)) + " · " + esc(it.tag) + "</span></div></div>" +
+        (it.stats.length ? '<ul class="istats">' + it.stats.map(function (s) { return "<li>" + esc(s) + "</li>"; }).join("") + "</ul>" : '<p class="cdesc" style="min-height:0;font-size:13px">' + esc(it.passive.length > 70 ? it.passive.slice(0, 70) + "…" : it.passive) + "</p>") +
+        '<div class="cfoot"><span class="mono muted" style="font-size:10px">' + (it.price != null ? "価格" : esc(it.tag)) + '</span><span class="serif gold num" style="font-size:20px">' + (it.price != null ? it.price.toLocaleString() : "") + "</span></div></a>";
     }).join("") + "</div>";
   }
   function viewEquipment() {
-    S.itf = S.itf || { q: "", cat: "ALL", dmg: "ALL" };
+    S.itf = S.itf || { q: "", cat: "ALL", sort: "price" };
     var f = S.itf;
     return '<section class="phead">' + atmo({ h: 260, seed: 71 }) + '<div class="wrap">' + crumbs([["HOME", "#home"], ["EQUIPMENT"]]) +
       '<div class="phead-row"><div style="display:flex;flex-direction:column;gap:14px"><h1 class="rise">EQUIPMENT</h1><p class="jp rise d1">装備一覧 — 何を、いつ、誰が積むか</p></div>' +
-      '<div style="display:flex;align-items:baseline;gap:12px"><span class="serif gold num" style="font-size:64px;line-height:1" data-icount>' + filteredItems().length + '</span><span class="mono muted">/ ' + Object.keys(window.VEIL_ITEMS).length + " 個を表示</span></div></div></div></section>" +
-      '<section class="section tight" style="padding-top:40px"><div class="wrap" style="display:flex;flex-direction:column;gap:40px">' +
-      '<div class="filters" role="search"><div class="frow"><div class="fsearch" style="border-right:0">' + IC.search + '<label for="it-q" class="sr">装備名・効果で検索</label><input id="it-q" type="search" placeholder="装備名・効果で検索" value="' + esc(f.q) + '" data-input="it-q" autocomplete="off"></div></div>' +
-      '<div class="fgroups"><div class="fgroup" role="group" aria-label="種類"><span class="mono gold" style="font-size:10px">種類</span>' + chips("icat", [["ALL", "ALL"], ["atk", "攻撃"], ["def", "防御"], ["boots", "移動"]], f.cat) + "</div>" +
-      '<div class="fgroup" role="group" aria-label="攻撃の種類"><span class="mono gold" style="font-size:10px">ダメージ</span>' + chips("idmg", [["ALL", "ALL"], ["物理", "物理"], ["魔法", "魔法"]], f.dmg) + "</div></div></div>" +
-      '<p class="sample-note"><span class="badge">SAMPLE</span>装備名はVEILオリジナルの仮のものです。実際のアイテムに差し替える予定で、能力値と価格はデータが入るまで「—」と表示します。</p>' +
-      '<div id="item-grid" aria-live="polite">' + itemGrid() + "</div></div></section>";
+      '<div style="display:flex;align-items:baseline;gap:12px"><span class="serif gold num" style="font-size:64px;line-height:1" data-icount>' + filteredItems().length + '</span><span class="mono muted">/ ' + Object.keys(G.items).length + " 個を表示</span></div></div>" + gearTabs("equipment") + "</div></section>" +
+      '<section class="section tight" style="padding-top:40px"><div class="wrap" style="display:flex;flex-direction:column;gap:32px">' +
+      '<div class="filters" role="search"><div class="frow"><div class="fsearch">' + IC.search + '<label for="it-q" class="sr">装備名・効果で検索</label><input id="it-q" type="search" placeholder="装備名・効果で検索(例 クリティカル、HP)" value="' + esc(f.q) + '" data-input="it-q" autocomplete="off"></div>' +
+      '<div class="fsort"><label for="it-sort" class="mono muted" style="font-size:10px">SORT</label><select id="it-sort" data-bind="it-sort">' + [["price", "価格が高い順"], ["cheap", "価格が安い順"], ["name", "名前順"]].map(function (o) { return '<option value="' + o[0] + '"' + (o[0] === f.sort ? " selected" : "") + ">" + o[1] + "</option>"; }).join("") + "</select>" + IC.chev + "</div></div>" +
+      '<div class="fgroups"><div class="fgroup" role="group" aria-label="種類"><span class="mono gold" style="font-size:10px">種類</span>' +
+      chips("icat", [["ALL", "ALL"]].concat(G.cats.map(function (c) { return [c[0], c[1] + (catCount(c[0]) ? "" : '<span class="muted" style="font-size:10px"> 準備中</span>')]; })), f.cat) + "</div></div></div>" +
+      gearSource() + '<div id="item-grid" aria-live="polite">' + itemGrid() + "</div></div></section>";
   }
   function viewItem(id) {
-    var it = (window.VEIL_ITEMS || {})[id];
+    var it = G.items[id];
     if (!it) return viewNotFound("この装備は見つかりませんでした。");
-    var SL = window.VEIL_SLOTS || { itemCost: {} }, cost = SL.itemCost[id], users = usersOf(id);
-    var same = Object.keys(window.VEIL_ITEMS).filter(function (k) { var o = window.VEIL_ITEMS[k]; return k !== id && o.cat === it.cat && (o.dmg || "") === (it.dmg || ""); });
-    return '<section class="phead">' + atmo({ h: 240, seed: 73 }) + '<div class="wrap">' + crumbs([["HOME", "#home"], ["EQUIPMENT", "#equipment"], [esc(D.items[id])]]) +
-      '<div style="display:flex;flex-wrap:wrap;align-items:center;gap:28px">' + itemIcon(id, 110) + '<div style="display:flex;flex-direction:column;gap:10px"><span class="eyebrow">' + CAT[it.cat] + (it.dmg ? " · " + it.dmg : "") + '</span><h1 class="mincho rise" style="font-size:clamp(40px,5vw,64px);letter-spacing:.06em">' + esc(D.items[id]) + '</h1><p class="prose">' + esc(it.desc) + "</p></div></div></div></section>" +
+    var users = usersOf(id);
+    var c0 = it.cats[0], same = Object.keys(G.items).filter(function (k) { return k !== id && G.items[k].cats.indexOf(c0) >= 0; }).sort(function (a, b) { return Math.abs((G.items[a].price || 0) - (it.price || 0)) - Math.abs((G.items[b].price || 0) - (it.price || 0)); }).slice(0, 8);
+    return '<section class="phead">' + atmo({ h: 240, seed: 73 }) + '<div class="wrap">' + crumbs([["HOME", "#home"], ["EQUIPMENT", "#equipment"], [esc(it.name)]]) +
+      '<div style="display:flex;flex-wrap:wrap;align-items:center;gap:28px">' + itemIcon(id, 120) + '<div style="display:flex;flex-direction:column;gap:10px"><span class="eyebrow">' + esc(catLabel(it)) + " · " + esc(it.tag) + '</span><h1 class="mincho rise" style="font-size:clamp(40px,5vw,64px);letter-spacing:.06em">' + esc(it.name) + "</h1>" + (it.price != null ? '<p class="mono muted" style="font-size:12px">価格 <span class="serif gold num" style="font-size:26px;letter-spacing:0">' + it.price.toLocaleString() + "</span></p>" : '<p class="mono muted" style="font-size:12px">' + esc(it.tag) + " · 価格は未掲載</p>") + "</div></div></div></section>" +
       '<section class="section tight"><div class="wrap dgrid"><div style="display:flex;flex-direction:column;gap:48px;min-width:0">' +
-      '<div class="block"><h2>STATS <small>能力値</small></h2><div class="kpis"><div><span class="mono muted" style="font-size:10px">価格</span><span class="serif num" style="font-size:28px">' + (cost != null ? cost.toLocaleString() : "—") + "</span>" + (cost != null ? "" : '<span class="tag dim" style="align-self:flex-start">データ待ち</span>') + '</div><div><span class="mono muted" style="font-size:10px">上がる能力</span><span class="muted">—</span><span class="tag dim" style="align-self:flex-start">データ待ち</span></div><div><span class="mono muted" style="font-size:10px">採用率</span><span class="muted">—</span><span class="tag dim" style="align-self:flex-start">データ待ち</span></div></div></div>' +
+      (it.stats.length ? '<div class="block"><h2>STATS <small>上がる能力</small></h2><ul class="istats big">' + it.stats.map(function (s) { return "<li>" + esc(s) + "</li>"; }).join("") + "</ul></div>" : "") +
+      '<div class="block"><h2>EFFECT <small>効果</small></h2>' + (it.passive ? '<p class="prose">' + esc(it.passive) + "</p>" : '<p class="muted">能力値が上がるだけで、特別な効果はありません。</p>') + (it.cut ? '<p class="muted" style="font-size:12px">ゲーム画面で説明が途中までしか表示されていなかったため、続きは準備中です。</p>' : "") + "</div>" +
       '<div class="block"><h2>USED BY <small>この装備を使うキャラ</small></h2>' + (users.length ? '<div class="side-list">' + users.map(function (u) {
-        return '<a href="#champion-' + u.c.id + '">' + portrait(u.c, true) + '<span style="display:flex;flex-direction:column;flex:1;min-width:0"><span class="serif" style="font-size:20px;line-height:1.1">' + esc(u.c.name) + '</span><span class="mono muted" style="font-size:10px">' + laneLabel(u.c.role) + "</span></span>" + (u.rec ? '<span class="tag">おすすめに入る</span>' : '<span class="tag dim">型によって使う</span>') + "</a>"; }).join("") + "</div>" : '<p class="muted">この装備を使うビルドはまだありません。</p>') + "</div></div>" +
-      '<aside class="daside"><div class="block"><h2 style="font-size:26px">SIMILAR <small>同じ種類の装備</small></h2><div class="side-list">' + same.map(function (k) { return '<a href="#item-' + k + '">' + itemIcon(k, 44) + '<span class="mincho" style="font-size:16px;flex:1">' + esc(D.items[k]) + "</span></a>"; }).join("") + "</div></div></aside></div></section>";
+        return '<a href="#champion-' + u.c.id + '">' + portrait(u.c, true) + '<span class="serif" style="font-size:20px;flex:1">' + esc(u.c.name) + "</span></a>"; }).join("") + "</div>" : '<div class="slot"><span class="muted">ヒーローごとのビルドが入ると、ここにこの装備を使うヒーローが並びます。</span></div>') + "</div>" + gearSource() + "</div>" +
+      '<aside class="daside"><div class="block"><h2 style="font-size:26px">SIMILAR <small>' + (it.price != null ? "近い価格の" : "同じ種類の") + esc(CAT[c0]) + '装備</small></h2><div class="side-list">' + same.map(function (k) { return '<a href="#item-' + k + '">' + itemIcon(k, 44) + '<span class="mincho" style="font-size:16px;flex:1">' + esc(G.items[k].name) + '</span><span class="mono muted num" style="font-size:11px">' + (G.items[k].price != null ? G.items[k].price.toLocaleString() : "") + "</span></a>"; }).join("") + "</div></div></aside></div></section>";
+  }
+  function talentCard(t) {
+    return '<article class="tcard" id="tal-' + t.id + '">' + gicon("icons/t-" + t.id + ".webp", 56) + '<div style="display:flex;flex-direction:column;gap:6px;min-width:0"><h3 class="mincho">' + esc(t.name) + "</h3>" + (t.sub ? '<span class="gold" style="font-size:13px">' + esc(t.sub) + "</span>" : "") +
+      '<p style="font-size:14px;line-height:1.8">' + esc(t.desc) + "</p>" + (t.extra ? '<p class="muted" style="font-size:12px;line-height:1.7">' + esc(t.extra) + (t.cut ? "…" : "") + "</p>" : "") + "</div></article>";
+  }
+  function viewEmblem() {
+    return '<section class="phead">' + atmo({ h: 260, seed: 77 }) + '<div class="wrap">' + crumbs([["HOME", "#home"], ["EQUIPMENT", "#equipment"], ["EMBLEM"]]) +
+      '<div class="phead-row"><div style="display:flex;flex-direction:column;gap:14px"><h1 class="rise">EMBLEM</h1><p class="jp rise d1">エンブレムと天賦 — 試合前に決める、もう一つのビルド</p></div></div>' + gearTabs("emblem") + "</div></section>" +
+      '<section class="section tight" style="padding-top:40px"><div class="wrap" style="display:flex;flex-direction:column;gap:56px">' +
+      '<div class="block">' + secHead("01", "EMBLEMS", "エンブレム 7種") + '<div class="embgrid">' + G.emblems.map(function (e) {
+        return '<div class="ecard">' + gicon(e.icon, 64, e.name) + '<div style="display:flex;flex-direction:column;gap:8px;min-width:0"><h3 class="mincho">' + esc(e.name) + "</h3>" +
+          (e.stats ? '<span class="mono muted" style="font-size:10px" title="' + esc(e.full) + '">Lv60</span><ul class="istats">' + e.stats.map(function (s) { return "<li>" + esc(s[0]) + ' <b class="num">' + esc(s[1]) + "</b></li>"; }).join("") + "</ul>" : '<span class="tag dim" style="align-self:flex-start">能力値は準備中</span>') + "</div></div>";
+      }).join("") + '</div><p class="sample-note">能力値はすべてLv60のものです。</p></div>' +
+      G.talents.map(function (tr) {
+        return '<div class="block">' + secHead("0" + (tr.tier + 1), "TALENT " + tr.tier, "天賦 " + tr.label + " — " + tr.note) + '<p class="muted" style="font-size:13px">この段の中から1つ選びます。</p><div class="tgrid">' + tr.list.map(talentCard).join("") + "</div></div>";
+      }).join("") + gearSource() + "</div></section>";
+  }
+  function viewSpells() {
+    return '<section class="phead">' + atmo({ h: 260, seed: 79 }) + '<div class="wrap">' + crumbs([["HOME", "#home"], ["EQUIPMENT", "#equipment"], ["SPELLS"]]) +
+      '<div class="phead-row"><div style="display:flex;flex-direction:column;gap:14px"><h1 class="rise">SPELLS</h1><p class="jp rise d1">バトルスキル — 試合で1つだけ持ち込める切り札</p></div>' +
+      '<div style="display:flex;align-items:baseline;gap:12px"><span class="serif gold num" style="font-size:64px;line-height:1">' + G.spells.length + '</span><span class="mono muted">種類</span></div></div>' + gearTabs("spells") + "</div></section>" +
+      '<section class="section tight" style="padding-top:40px"><div class="wrap" style="display:flex;flex-direction:column;gap:32px"><div class="tgrid">' + G.spells.map(function (s) {
+        return '<article class="tcard" id="spell-' + s.id + '">' + gicon("icons/s-" + s.id + ".webp", 64) + '<div style="display:flex;flex-direction:column;gap:6px;min-width:0"><div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap"><h3 class="mincho">' + esc(s.name) + '</h3><span class="mono gold" style="font-size:11px">CD ' + s.cd + '秒</span></div><span class="tag dim" style="align-self:flex-start">' + esc(s.tag) + "</span>" +
+          '<p style="font-size:14px;line-height:1.8">' + esc(s.desc) + (s.cut ? "…" : "") + "</p></div></article>"; }).join("") + "</div>" + gearSource() + "</div></section>";
   }
 
   /* ---------------- role switch on the detail page ---------------- */
@@ -472,12 +505,13 @@
   function embBox(c) {
     var list = ((window.VEIL_EMBLEM_OF || {})[c.id]) || ["共通"];
     S.emb = S.emb || {}; var cur = S.emb[c.id] && list.indexOf(S.emb[c.id]) >= 0 ? S.emb[c.id] : list[0];
-    var tal = (window.VEIL_EMBLEMS || {})[cur] || [];
-    var chipsH = list.length > 1 ? '<div class="bvars" role="group" aria-label="エンブレム">' + list.map(function (e) {
-      return '<button type="button" class="chip" data-action="emb" data-id="' + c.id + '" data-value="' + e + '" aria-pressed="' + (e === cur) + '">' + esc(e) + "</button>"; }).join("") + "</div>" : "";
-    return '<div class="item"><b>EMBLEM · エンブレム</b><span>' + esc(cur) + '</span><small class="muted">クラスから選んだ仮の表示です</small>' + chipsH + "</div>" +
-      '<div class="item"><b>TALENTS · エンブレム天賦</b><span class="muted" style="font-size:13px">天賦の情報は準備中です</span></div>';
+    var e = G.emblems.filter(function (x) { return x.name === cur; })[0];
+    var chipsH = list.length > 1 ? '<div class="bvars" role="group" aria-label="エンブレム">' + list.map(function (n) {
+      return '<button type="button" class="chip" data-action="emb" data-id="' + c.id + '" data-value="' + n + '" aria-pressed="' + (n === cur) + '">' + esc(n) + "</button>"; }).join("") + "</div>" : "";
+    return '<div class="item"><b>EMBLEM · エンブレム</b><span style="display:flex;align-items:center;gap:10px">' + (e ? gicon(e.icon, 32, e.name) : "") + esc(cur) + '</span><small class="muted">クラスから選んだ仮の表示です</small>' + chipsH + "</div>" +
+      '<div class="item"><b>TALENTS · エンブレム天賦</b><span class="muted" style="font-size:13px">このヒーローのおすすめはデータ待ちです</span><a class="link" href="#emblem" style="padding:0">天賦の一覧を見る' + IC.arrow + "</a></div>";
   }
+
 
   /* ---------------- MATCHUP LAB ---------------- */
   function labForm() {
@@ -684,6 +718,8 @@
     if (h === "roulette") return { nav: "roulette", html: viewRoulette() };
     if ((m = h.match(/^champion-([a-z]+)$/))) return { nav: "champions", html: viewChampion(m[1]) };
     if (h === "equipment") return { nav: "equipment", html: viewEquipment() };
+    if (h === "emblem") return { nav: "equipment", html: viewEmblem(), title: "EMBLEM — VEIL" };
+    if (h === "spells") return { nav: "equipment", html: viewSpells(), title: "SPELLS — VEIL" };
     if ((m = h.match(/^item-([a-z]+)$/))) return { nav: "equipment", html: viewItem(m[1]) };
     if (h === "matchup") return { nav: "matchup", html: viewLab() };
     if ((m = h.match(/^matchup-([a-z]+)-([a-z]+)-([a-z]+)$/))) return { nav: "matchup", html: viewMatchup(m[1], m[2], m[3].toUpperCase()) };
@@ -699,7 +735,7 @@
     if (r.focus) { var el = document.getElementById(r.focus); if (el) setTimeout(function () { el.scrollIntoView({ block: "center" }); }, 60); }
     else if (!keepScroll) window.scrollTo(0, 0);
     var titles = { roulette: "ROULETTE — VEIL", home: "VEIL", champions: "CHAMPIONS — VEIL", equipment: "EQUIPMENT — VEIL", matchup: "MATCHUP LAB — VEIL", lore: "LORE ARCHIVE — VEIL", patch: "PATCH & META — VEIL" };
-    document.title = titles[r.nav] || "VEIL";
+    document.title = r.title || titles[r.nav] || "VEIL";
   }
   function go(hash) { if (location.hash === hash) render(); else location.hash = hash; }
 
@@ -722,13 +758,13 @@
     if (act === "filter") {
       var g = t.getAttribute("data-group"), v = t.getAttribute("data-value");
       if (g === "rl-lane" || g === "rl-cls") { S.rl[g === "rl-lane" ? "lane" : "cls"] = v; document.querySelectorAll('[data-group="' + g + '"]').forEach(function (b) { b.setAttribute("aria-pressed", String(b.getAttribute("data-value") === v)); }); if (!S.rl.spinning) document.getElementById("rl-strip-wrap").innerHTML = rlReelIdle(); rlCount(); return; }
-      if (g === "icat" || g === "idmg") { S.itf[g === "icat" ? "cat" : "dmg"] = v; document.querySelectorAll('[data-group="' + g + '"]').forEach(function (b) { b.setAttribute("aria-pressed", String(b.getAttribute("data-value") === v)); }); document.getElementById("item-grid").innerHTML = itemGrid(); return; }
+      if (g === "icat") { S.itf.cat = v; document.querySelectorAll('[data-group="' + g + '"]').forEach(function (b) { b.setAttribute("aria-pressed", String(b.getAttribute("data-value") === v)); }); document.getElementById("item-grid").innerHTML = itemGrid(); return; }
       if (g === "meta-role") { S.meta.role = v; document.querySelectorAll('[data-group="meta-role"]').forEach(function (b) { b.setAttribute("aria-pressed", String(b.getAttribute("data-value") === v)); }); document.getElementById("meta-table").innerHTML = metaTable(); return; }
       S.cf[g] = v;
       document.querySelectorAll('[data-group="' + g + '"]').forEach(function (b) { b.setAttribute("aria-pressed", String(b.getAttribute("data-value") === v)); });
       document.getElementById("champ-grid").innerHTML = champGrid();
     } else if (act === "reset-items") {
-      S.itf = { q: "", cat: "ALL", dmg: "ALL" }; render(true);
+      S.itf = { q: "", cat: "ALL", sort: (S.itf || {}).sort || "price" }; render(true);
     } else if (act === "reset-filters") {
       S.cf = { q: "", role: "ALL", diff: "ALL", attr: "ALL", sort: S.cf.sort }; render(true);
     } else if (act === "sort") {
@@ -777,6 +813,7 @@
   document.addEventListener("change", function (ev) {
     var t = ev.target, b = t.getAttribute("data-bind");
     if (b === "cf-sort") { S.cf.sort = t.value; document.getElementById("champ-grid").innerHTML = champGrid(); }
+    if (b === "it-sort") { S.itf.sort = t.value; document.getElementById("item-grid").innerHTML = itemGrid(); }
     if (b === "q-you" || b === "l-you") S.lab.you = t.value;
     if (b === "q-enemy" || b === "l-enemy") S.lab.enemy = t.value;
     if (b === "q-lane" || b === "l-lane") S.lab.lane = t.value;
@@ -820,7 +857,9 @@
   var INDEX = [];
   D.champions.forEach(function (c) { INDEX.push({ t: c.name, s: c.title + " · " + laneLabel(c.role), h: "#champion-" + c.id, k: "CHAMPION", c: c, q: (c.name + c.title + c.role + c.desc).toLowerCase() }); });
   Object.keys(D.matchups).forEach(function (k) { var p = k.split("|"); INDEX.push({ t: CH[p[0]].name + " vs " + CH[p[1]].name, s: laneLabel(p[2]) + " · " + D.matchups[k].key, h: muHash(p[0], p[1], p[2]), k: "MATCHUP", c: CH[p[0]], q: (CH[p[0]].name + CH[p[1]].name + "vs対面" + D.matchups[k].key).toLowerCase() }); });
-  Object.keys(window.VEIL_ITEMS || {}).forEach(function (id) { var it = window.VEIL_ITEMS[id]; INDEX.push({ t: D.items[id], s: CAT[it.cat] + (it.dmg ? " · " + it.dmg : "") + " · " + it.desc, h: "#item-" + id, k: "ITEM", q: (D.items[id] + it.desc).toLowerCase() }); });
+  Object.keys(G.items).forEach(function (id) { var it = G.items[id]; INDEX.push({ t: it.name, s: catLabel(it) + " · " + it.tag + " · " + it.stats.join(" "), h: "#item-" + id, k: "ITEM", q: (it.name + it.tag + it.passive).toLowerCase() }); });
+  G.talents.forEach(function (tr) { tr.list.forEach(function (t) { INDEX.push({ t: t.name, s: "天賦 " + tr.label + " · " + (t.sub || t.desc), h: "#emblem", k: "TALENT", q: (t.name + (t.sub || "") + t.desc).toLowerCase() }); }); });
+  G.spells.forEach(function (sp) { INDEX.push({ t: sp.name, s: "バトルスキル · " + sp.tag + " · CD " + sp.cd + "秒", h: "#spells", k: "SPELL", q: (sp.name + sp.tag + sp.desc).toLowerCase() }); });
   if (D.lore) D.lore.events.forEach(function (e) { INDEX.push({ t: e.name, s: e.era, h: "#lore-" + e.id, k: "LORE", q: (e.name + e.text).toLowerCase() }); });
   if (D.lore) D.lore.nations.forEach(function (n) { INDEX.push({ t: n.name, s: "国家", h: "#lore", k: "LORE", q: (n.name + n.text).toLowerCase() }); });
   [["パッチ・メタ", "#patch"], ["Tier List", "#patch"], ["対面攻略", "#matchup"]].forEach(function (p) { INDEX.push({ t: p[0], s: "ページ", h: p[1], k: "PAGE", q: p[0].toLowerCase() }); });
