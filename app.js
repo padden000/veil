@@ -353,29 +353,57 @@
   var STAT_MIN_GAMES = 20; /* a day with fewer games than this is drawn dashed and faint as データ不足 */
   function wavg(arr) { var g = 0, w = 0; arr.forEach(function (p) { g += p.games; w += p.wr * p.games; }); return g ? w / g : null; }
   function gsum(arr) { return arr.reduce(function (a, p) { return a + p.games; }, 0); }
+  /* the user's own games with this hero: the hero they marked as themselves in that match (MATCH LOG),
+     or, for matches with no mark, the ally in their usual lane (see MY PAGE) */
+  function myHeroRec(id) {
+    var out = { setup: meSetUp(), all: { games: 0, wins: 0 }, month: {} };
+    (window.VEIL_MATCHES || []).forEach(function (m, i) {
+      var ml = meMyLane(m, i); if (!ml || m.ally[ml.lane] !== id) return;
+      var mo = m.date.slice(0, 7); out.all.games++; if (m.win) out.all.wins++;
+      out.month[mo] = out.month[mo] || { games: 0, wins: 0 }; out.month[mo].games++; if (m.win) out.month[mo].wins++;
+    });
+    return out;
+  }
+  var MY_COLOR = "#6E9BD1";
   function statsBox(c) {
     var ST = (window.VEIL_STATS || {})[c.id];
     if (!ST || !ST.all.games) return '<p class="muted" style="font-size:14px">まだ記録した試合に登場していません。</p>';
     var months = Object.keys(ST.month).sort(), md = function (m) { return Number(m.slice(5, 7)) + "月"; };
+    var MY = myHeroRec(c.id), mine = MY.all.games > 0;
+    var myNote = !MY.setup ? '<p class="me-note">あなたの成績も重ねて表示できます。<a href="#me">マイページ</a>の「記録」タブで試合ごとに自分のヒーローを選ぶか、「英雄」タブで「いつものレーン」を選んでください。</p>'
+      : !mine ? '<p class="me-note">あなたが ' + esc(c.name) + ' を使った記録はまだありません。<a href="#me">マイページで設定を見る</a></p>'
+      : '<p class="me-note"><i class="me-key" style="background:' + MY_COLOR + '"></i>あなた: ' + MY.all.games + "試合 " + MY.all.wins + "勝 · 勝率 " + pct(MY.all.wins / MY.all.games * 100) + " — 全体 " + pct(ST.all.wins / ST.all.games * 100) + (MY.all.games >= ME_MIN ? "より " + mePt(MY.all.wins / MY.all.games * 100 - ST.all.wins / ST.all.games * 100) : '<span class="tag dim me-thin">データ不足</span>') + "</p>";
     var chart;
     if (months.length < 2) {
-      var r0 = ST.month[months[0]];
-      chart = '<div class="chart-box"><div class="slot" style="height:160px"><span class="mono muted" style="font-size:10px">勝率の推移</span><span class="muted" style="font-size:13px">記録が ' + md(months[0]) + " の1か月分だけなので、推移はまだ描けません(" + r0.games + "試合 · " + pct(r0.wins / r0.games * 100) + ")。</span></div></div>";
+      var r0 = ST.month[months[0]], m0 = MY.month[months[0]];
+      chart = '<div class="chart-box"><div class="slot" style="height:160px"><span class="mono muted" style="font-size:10px">勝率の推移</span><span class="muted" style="font-size:13px">記録が ' + md(months[0]) + " の1か月分だけなので、推移はまだ描けません(全体 " + r0.games + "試合 · " + pct(r0.wins / r0.games * 100) + (m0 ? " / あなた " + m0.games + "試合 · " + pct(m0.wins / m0.games * 100) : "") + ")。</span></div></div>";
     } else {
-      var pts = months.map(function (m) { return { m: m, wr: ST.month[m].wins / ST.month[m].games * 100, games: ST.month[m].games }; });
-      var W = 660, H = 230, L = 44, Rr = 20, T = 16, Bm = 40, lo = 0, hi = 100;
+      var pts = months.map(function (m) { var y = MY.month[m]; return { m: m, wr: ST.month[m].wins / ST.month[m].games * 100, games: ST.month[m].games, my: y ? y.wins / y.games * 100 : null, myg: y ? y.games : 0 }; });
+      var W = 660, H = 230, L = 44, Rr = 20, T = 22, Bm = 40, lo = 0, hi = 100;
       var X = function (i) { return L + (pts.length === 1 ? 0 : i * (W - L - Rr) / (pts.length - 1)); }, Yp = function (v) { return T + (hi - v) / (hi - lo) * (H - T - Bm); };
       var grid = [0, 50, 100].map(function (t) { return '<line x1="' + L + '" x2="' + (W - Rr) + '" y1="' + Yp(t) + '" y2="' + Yp(t) + '" stroke="' + (t === 50 ? "#65717D" : "#202026") + '"' + (t === 50 ? ' stroke-dasharray="2 4"' : "") + '/><text x="' + (L - 8) + '" y="' + (Yp(t) + 4) + '" text-anchor="end" fill="#85838A" font-size="11">' + t + "%</text>"; }).join("");
       var line = pts.map(function (p, i) { return (i ? "L" : "M") + X(i).toFixed(1) + " " + Yp(p.wr).toFixed(1); }).join(" ");
-      var dots = pts.map(function (p, i) { var thin = p.games < 5; return '<circle cx="' + X(i).toFixed(1) + '" cy="' + Yp(p.wr).toFixed(1) + '" r="4" fill="#B99A68"' + (thin ? ' opacity=".5"' : "") + '><title>' + md(p.m) + " 勝率 " + p.wr.toFixed(1) + "% · " + p.games + "試合</title></circle>" +
-        '<text x="' + X(i).toFixed(1) + '" y="' + (H - 14) + '" text-anchor="middle" fill="#85838A" font-size="11">' + md(p.m) + "</text>" + '<text x="' + X(i).toFixed(1) + '" y="' + (Yp(p.wr) - 10).toFixed(1) + '" text-anchor="middle" fill="#E8E5DF" font-size="11">' + Math.round(p.wr) + "% (" + p.games + ")</text>"; }).join("");
-      chart = '<div class="chart-box"><svg viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="月ごとの勝率の推移" style="width:100%;height:auto">' + grid + '<path d="' + line + '" fill="none" stroke="#B99A68" stroke-width="2"/>' + dots + "</svg>" +
-        '<div class="legend"><span>点の上は「勝率(試合数)」。5試合未満の月は点を薄くしています。</span></div></div>';
+      /* my line: only through months with games; gaps break the line */
+      var myLine = "", pen = false;
+      pts.forEach(function (p, i) { if (p.my == null) { pen = false; return; } myLine += (pen ? "L" : "M") + X(i).toFixed(1) + " " + Yp(p.my).toFixed(1); pen = true; });
+      var anchor = function (i) { return i === 0 ? "start" : i === pts.length - 1 ? "end" : "middle"; };
+      var dots = pts.map(function (p, i) {
+        var thin = p.games < 5, myAbove = p.my != null && p.my > p.wr;
+        var s = '<circle cx="' + X(i).toFixed(1) + '" cy="' + Yp(p.wr).toFixed(1) + '" r="4" fill="#B99A68" stroke="#111114" stroke-width="2"' + (thin ? ' opacity=".5"' : "") + '><title>' + md(p.m) + " 全体 勝率 " + p.wr.toFixed(1) + "% · " + p.games + "試合</title></circle>" +
+          '<text x="' + X(i).toFixed(1) + '" y="' + (H - 14) + '" text-anchor="' + anchor(i) + '" fill="#85838A" font-size="11">' + md(p.m) + "</text>" +
+          '<text x="' + X(i).toFixed(1) + '" y="' + (Yp(p.wr) + (myAbove ? 18 : -10)).toFixed(1) + '" text-anchor="' + anchor(i) + '" fill="#E8E5DF" font-size="11">' + Math.round(p.wr) + "% (" + p.games + ")</text>";
+        if (p.my != null) s += '<rect x="' + (X(i) - 4.5).toFixed(1) + '" y="' + (Yp(p.my) - 4.5).toFixed(1) + '" width="9" height="9" fill="' + MY_COLOR + '" stroke="#111114" stroke-width="2"' + (p.myg < 3 ? ' opacity=".5"' : "") + '><title>' + md(p.m) + " あなた 勝率 " + p.my.toFixed(1) + "% · " + p.myg + "試合</title></rect>" +
+          '<text x="' + X(i).toFixed(1) + '" y="' + (Yp(p.my) + (myAbove ? -10 : 18)).toFixed(1) + '" text-anchor="' + anchor(i) + '" fill="#B4B1AA" font-size="11">' + Math.round(p.my) + "% (" + p.myg + ")</text>";
+        return s;
+      }).join("");
+      chart = '<div class="chart-box"><svg viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="月ごとの勝率の推移' + (mine ? "(全体とあなた)" : "") + '" style="width:100%;height:auto">' + grid +
+        '<path d="' + line + '" fill="none" stroke="#B99A68" stroke-width="2"/>' + (mine ? '<path d="' + myLine + '" fill="none" stroke="' + MY_COLOR + '" stroke-width="2" stroke-dasharray="6 4"/>' : "") + dots + "</svg>" +
+        '<div class="legend">' + (mine ? '<span><i class="me-key" style="background:#B99A68;border-radius:50%"></i>全体(両チーム)</span><span><i class="me-key" style="background:' + MY_COLOR + '"></i>あなた(点線)</span>' : "") + "<span>数字は「勝率(試合数)」。全体は5試合未満、あなたは3試合未満の月を薄くしています。</span></div></div>";
     }
     var laneRows = D.roles.map(function (r) { var x = ST.lane[r.id]; return x ? "<tr><td>" + r.label + '</td><td class="num">' + x.games + '</td><td class="num">' + pct(x.wins / x.games * 100) + "</td><td>" + (c.sheetLanes && c.sheetLanes[r.id] ? c.sheetLanes[r.id] : "—") + "</td></tr>" : ""; }).join("");
     var rankRows = Object.keys(ST.rank).map(function (k) { var x = ST.rank[k]; return "<tr><td>" + esc(k) + '</td><td class="num">' + x.games + '</td><td class="num">' + pct(x.wins / x.games * 100) + "</td></tr>"; }).join("");
     return '<p class="sample-note"><span class="badge">VEIL集計</span>記録した ' + (window.VEIL_MATCH_INFO || {}).count + " 試合のうち、" + c.games + " 試合分の数字です。</p>" +
-      '<h3 class="subh" style="margin:0">月ごとの勝率</h3>' + chart +
+      '<h3 class="subh" style="margin:0">月ごとの勝率</h3>' + myNote + chart +
       '<h3 class="subh">レーンごとの成績</h3><div class="table-box"><table class="data" style="min-width:420px"><thead><tr><th>レーン</th><th>試合数</th><th>勝率</th><th>シートの適正</th></tr></thead><tbody>' + laneRows + "</tbody></table></div>" +
       '<h3 class="subh">ランク帯ごとの成績</h3><div class="table-box"><table class="data" style="min-width:360px"><thead><tr><th>ランク帯</th><th>試合数</th><th>勝率</th></tr></thead><tbody>' + rankRows + "</tbody></table></div>";
   }
@@ -695,17 +723,410 @@
     }, 3700);
   }
 
+  /* ---------------- MY PAGE ---------------- */
+  /* The sheet's matches are the user's own games: "ally" is always the user's team.
+     The sheet does not say which ally was the user, so "my heroes" come from the lane the user picks as their usual lane (kept in this browser). */
+  var ME_LANE_KEY = "veil-my-lane", ME_MIN = 3, ME_TREND_SKIP = 10;
+  function meLane() { var v = S.meLane; try { v = localStorage.getItem(ME_LANE_KEY) || v; } catch (e) {} return v && LANE_ORDER.indexOf(v) >= 0 ? v : "NONE"; }
+  var ME_PICK_KEY = "veil-my-picks", ME_PJ = { Solo: "ソロ", Duo: "デュオ", Trio: "トリオ", "5-stack": "5人" };
+  /* picks: { matchIndex: lane } — which ally the user was, per match. Sample: kept in this browser until login exists. */
+  function mePicks() { if (!S.mePicks) { try { S.mePicks = JSON.parse(localStorage.getItem(ME_PICK_KEY) || "{}") || {}; } catch (e) { S.mePicks = {}; } } return S.mePicks; }
+  function meSavePicks(o) { S.mePicks = o; try { localStorage.setItem(ME_PICK_KEY, JSON.stringify(o)); } catch (e) {} }
+  function mePickCount() { var M = window.VEIL_MATCHES || [], P = mePicks(); return M.filter(function (m, i) { return P[i] && m.ally[P[i]]; }).length; }
+  function meMyLane(m, i) { var p = mePicks()[i]; if (p && m.ally[p]) return { lane: p, src: "pick" }; var l = meLane(); return l !== "NONE" && m.ally[l] ? { lane: l, src: "lane" } : null; }
+  function meSetUp() { return mePickCount() > 0 || meLane() !== "NONE"; }
+  function meSetLane(v) { S.meLane = v; try { if (v === "NONE") localStorage.removeItem(ME_LANE_KEY); else localStorage.setItem(ME_LANE_KEY, v); } catch (e) {} }
+  function meRec(list) { var w = list.filter(function (m) { return m.win; }).length; return { games: list.length, wins: w, wr: list.length ? w / list.length * 100 : null }; }
+  function mePt(d) { return d == null ? "—" : '<span class="me-diff ' + (d >= 0 ? "up" : "down") + '">' + (d >= 0 ? "+" : "−") + Math.abs(d).toFixed(1) + "pt</span>"; }
+  function meBar(wr) { return '<span class="me-bar" aria-hidden="true"><i style="width:' + Math.round(wr || 0) + "%;background:" + (wr >= 50 ? "var(--gold)" : "var(--steel)") + '"></i><b></b></span>'; }
+  function meDur(sec) { return sec == null ? "—" : Math.floor(sec / 60) + ":" + ("0" + Math.round(sec % 60)).slice(-2); }
+  function meThin(n) { return n < ME_MIN ? ' <span class="tag dim me-thin">データ不足</span>' : ""; }
+  function meHero(c) { return '<a href="#champion-' + c.id + '" class="me-hero">' + portrait(c, true) + '<span style="display:flex;flex-direction:column;min-width:0"><span class="mincho" style="font-size:15px">' + esc(c.name) + '</span><span class="mono muted" style="font-size:10px">' + esc(c.en) + "</span></span></a>"; }
+  function meTile(label, big, sub) { return '<div class="me-tile"><span class="mono gold" style="font-size:10px">' + label + '</span><span class="serif num me-big">' + big + '</span><span class="muted" style="font-size:12px">' + (sub || "") + "</span></div>"; }
+  function meStreaks(M) {
+    var best = { w: 0, l: 0 }, run = 0, last = null;
+    M.forEach(function (m) { if (m.win === last) run++; else { run = 1; last = m.win; } if (m.win) best.w = Math.max(best.w, run); else best.l = Math.max(best.l, run); });
+    return { cur: run, curWin: last, bestW: best.w, bestL: best.l };
+  }
+  function meTrend(M) {
+    if (M.length < 2) return "";
+    var W = 680, H = 220, L = 44, R = 16, T = 14, B = 34, w = 0, SKIP = M.length > ME_TREND_SKIP + 2 ? ME_TREND_SKIP : 0;
+    var pts = M.map(function (m, i) { if (m.win) w++; return { n: i, m: m, wr: w / (i + 1) * 100 }; }).slice(SKIP);
+    pts.forEach(function (p, i) { p.i = i; });
+    var shown = M.slice(SKIP);
+    var X = function (i) { return L + i * (W - L - R) / (pts.length - 1); }, Y = function (v) { return T + (100 - v) / 100 * (H - T - B); };
+    var grid = [0, 50, 100].map(function (t) { return '<line x1="' + L + '" x2="' + (W - R) + '" y1="' + Y(t) + '" y2="' + Y(t) + '" stroke="' + (t === 50 ? "#65717D" : "#202026") + '"' + (t === 50 ? ' stroke-dasharray="2 4"' : "") + '/><text x="' + (L - 8) + '" y="' + (Y(t) + 4) + '" text-anchor="end" fill="#85838A" font-size="11">' + t + "%</text>"; }).join("");
+    var seen = {}, ticks = pts.filter(function (p) { var mo = p.m.date.slice(0, 7); if (seen[mo]) return false; seen[mo] = 1; return true; })
+      .map(function (p) { return '<line x1="' + X(p.i) + '" x2="' + X(p.i) + '" y1="' + (H - B) + '" y2="' + (H - B + 5) + '" stroke="#303037"/><text x="' + X(p.i) + '" y="' + (H - 12) + '" text-anchor="start" fill="#85838A" font-size="11">' + Number(p.m.date.slice(5, 7)) + "/" + Number(p.m.date.slice(8)) + "</text>"; }).join("");
+    var line = pts.map(function (p, i) { return (i ? "L" : "M") + X(i).toFixed(1) + " " + Y(p.wr).toFixed(1); }).join(" ");
+    var lastP = pts[pts.length - 1];
+    var hits = pts.map(function (p) { return '<rect x="' + (X(p.i) - (W - L - R) / pts.length / 2).toFixed(1) + '" y="' + T + '" width="' + ((W - L - R) / pts.length).toFixed(1) + '" height="' + (H - T - B) + '" fill="transparent"><title>' + (p.n + 1) + "試合目 · " + p.m.date.slice(5).replace("-", "/") + " · " + (p.m.win ? "勝ち" : "負け") + " · 累計勝率 " + p.wr.toFixed(1) + "%</title></rect>"; }).join("");
+    var strip = shown.map(function (m, i) { return '<i class="' + (m.win ? "w" : "l") + '" title="' + (i + SKIP + 1) + "試合目 " + m.date.slice(5).replace("-", "/") + " " + (m.win ? "勝ち" : "負け") + '"></i>'; }).join("");
+    return '<div class="chart-box"><svg viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="試合ごとの累計勝率の推移" style="width:100%;height:auto">' + grid + ticks +
+      '<path d="' + line + '" fill="none" stroke="#B99A68" stroke-width="2"/><circle cx="' + X(lastP.i).toFixed(1) + '" cy="' + Y(lastP.wr).toFixed(1) + '" r="4" fill="#B99A68" stroke="#111114" stroke-width="2"/>' +
+      '<text x="' + (X(lastP.i) - 8).toFixed(1) + '" y="' + (Y(lastP.wr) - 10).toFixed(1) + '" text-anchor="end" fill="#E8E5DF" font-size="12">' + lastP.wr.toFixed(1) + "%</text>" + hits + "</svg>" +
+      '<div class="me-strip" style="padding:0 ' + (R / W * 100).toFixed(2) + "% 0 " + (L / W * 100).toFixed(2) + '%" aria-label="試合ごとの勝ち負け(古い順)">' + strip + "</div>" +
+      '<div class="legend">' + "<span>線は1試合目からの累計勝率、点線は平均の50%。下の帯は1試合ずつの結果(古い順)。" + (SKIP ? "最初の" + SKIP + "試合は試合数が少なく勝率が大きくぶれるので、" + (SKIP + 1) + "試合目から表示しています(勝率の計算には含めています)。" : "") + "</span>" + '<span><i class="me-key w"></i>勝ち</span><span><i class="me-key l"></i>負け</span></div></div>';
+  }
+  function meTable(head, rows) { return '<div class="table-box"><table class="data me-table"><thead><tr>' + head.map(function (h) { return "<th>" + h + "</th>"; }).join("") + "</tr></thead><tbody>" + rows.join("") + "</tbody></table></div>"; }
+  function meGroupRows(groups, all) {
+    return groups.filter(function (g) { return g.r.games; }).map(function (g) {
+      return "<tr><td>" + g.label + meThin(g.r.games) + '</td><td class="num">' + g.r.games + '</td><td class="num">' + g.r.wins + "-" + (g.r.games - g.r.wins) + '</td><td><span class="me-wr"><span class="num">' + pct(g.r.wr) + "</span>" + meBar(g.r.wr) + '</span></td><td class="num">' + (g.r.games < ME_MIN ? '<span class="muted">—</span>' : mePt(g.r.wr - all.wr)) + "</td></tr>";
+    });
+  }
+  function meHeroes() {
+    var lane = meLane(), M = window.VEIL_MATCHES || [], all = meRec(M), picked = mePickCount();
+    var pick = '<div class="fgroup" role="group" aria-label="いつものレーン"><span class="mono gold" style="font-size:10px">いつものレーン</span>' + chips("me-lane", [["NONE", "使わない"]].concat(LANE_ORDER.map(function (L) { return [L, L]; })), lane) + "</div>" +
+      '<p class="muted" style="font-size:12px;margin-top:-8px">「記録」タブで自分のヒーローを選んでいない試合だけ、いつものレーンの味方を自分として数えます。</p>';
+    if (!meSetUp()) return pick + '<div class="empty" style="padding:44px 24px"><span class="tag dim">まだ数えられません</span><h3>自分が使ったヒーローを教えてください</h3><p class="muted" style="font-size:14px;max-width:580px">シートには自分がどのヒーローを使ったかの列がありません。「記録」タブで試合ごとに自分のヒーローを選ぶか、上でいつものレーンを選んでください。</p><button class="btn ghost" type="button" data-action="tab" data-target="me-log">記録タブを開く' + IC.arrow + "</button></div>";
+    var by = {}, lanesOf = {}, counted = 0;
+    M.forEach(function (m, i) { var ml = meMyLane(m, i); if (!ml) return; var id = m.ally[ml.lane]; if (!id || !CH[id]) return; counted++; (by[id] = by[id] || []).push(m); lanesOf[id] = lanesOf[id] || {}; lanesOf[id][ml.lane] = (lanesOf[id][ml.lane] || 0) + 1; });
+    var topLane = function (id) { var o = lanesOf[id]; return Object.keys(o).sort(function (a, b) { return o[b] - o[a]; })[0]; };
+    var list = Object.keys(by).map(function (id) { return { c: CH[id], r: meRec(by[id]), lane: topLane(id) }; }).sort(function (a, b) { return b.r.games - a.r.games || b.r.wr - a.r.wr; });
+    var best = list.filter(function (x) { return x.r.games >= ME_MIN; }).sort(function (a, b) { return b.r.wr - a.r.wr || b.r.games - a.r.games; }).slice(0, 3);
+    var cards = best.length ? '<div class="me-best">' + best.map(function (x, i) {
+      return '<a class="card me-bcard" href="#champion-' + x.c.id + '"><span class="mono gold" style="font-size:10px">0' + (i + 1) + " · 得意ヒーロー</span>" + '<div style="display:flex;align-items:center;gap:14px">' + portrait(x.c) + '<span style="display:flex;flex-direction:column"><span class="mincho" style="font-size:19px">' + esc(x.c.name) + '</span><span class="mono muted" style="font-size:10px">' + esc(x.c.en) + " · " + x.lane + "</span></span></div>" +
+        '<div class="me-bnums"><span><span class="serif num" style="font-size:30px">' + pct(x.r.wr) + '</span><span class="muted" style="font-size:12px">' + x.r.games + "試合 " + x.r.wins + "勝</span></span><span class=\"muted\" style=\"font-size:12px;text-align:right\">いつもより<br>" + mePt(x.r.wr - all.wr) + "</span></div></a>";
+    }).join("") + "</div>" : '<p class="muted" style="font-size:13px">' + ME_MIN + "試合以上使ったヒーローがまだいないので、得意ヒーローは出せません。</p>";
+    var rows = list.map(function (x) {
+      return "<tr><td>" + meHero(x.c) + '</td><td class="mono muted" style="font-size:11px">' + x.lane + '</td><td class="num">' + x.r.games + meThin(x.r.games) + '</td><td><span class="me-wr"><span class="num">' + pct(x.r.wr) + "</span>" + meBar(x.r.wr) + '</span></td><td class="num">' + (x.r.games < ME_MIN ? '<span class="muted">—</span>' : mePt(x.r.wr - all.wr)) + "</td></tr>";
+    });
+    var src = picked ? "「記録」タブで自分を選んだ " + picked + " 試合" + (lane !== "NONE" ? "と、残りの試合のうち " + lane + " の味方" : "") : lane + " の味方ヒーロー";
+    return pick + '<p class="muted" style="font-size:13px">' + src + "を、あなたが使ったヒーローとして数えています(" + counted + "試合 · " + list.length + "体)。「いつもとの差」は、あなたの全体の勝率(" + pct(all.wr) + ")との差です。</p>" +
+      cards + '<h3 class="subh">使ったヒーロー</h3>' + meTable(["ヒーロー", "レーン", "試合数", "あなたの勝率", "いつもとの差"], rows);
+  }
+  function meLogRow(m, i) {
+    var p = mePicks()[i]; if (p && !m.ally[p]) p = null;
+    var team = function (side) {
+      var own = side === "ally";
+      return '<div class="mlog-team ' + side + '"' + (own ? ' role="group" aria-label="味方 · 自分のヒーローを選ぶ"' : ' aria-label="敵"') + ">" + LANE_ORDER.map(function (L) {
+        var c = CH[m[side][L]]; if (!c) return '<span class="mlog-h none"><span class="portrait sm"></span><span class="mono">' + L + "</span></span>";
+        var on = own && p === L, inner = portrait(c, true) + '<span class="mono">' + L + "</span>";
+        return own ? '<button type="button" class="mlog-h' + (on ? " on" : "") + '" data-action="me-pick" data-i="' + i + '" data-lane="' + L + '" aria-pressed="' + on + '" title="' + esc(c.name) + " (" + L + ")" + (on ? " · 選択を外す" : " · 自分にする") + '">' + inner + (on ? "<b>YOU</b>" : "") + "</button>"
+          : '<span class="mlog-h" title="' + esc(c.name) + " (" + L + ')">' + inner + "</span>";
+      }).join("") + "</div>";
+    };
+    return '<li class="mlog-row' + (p ? " picked" : "") + '" id="mlog-' + i + '"><div class="mlog-info"><span class="mono muted" style="font-size:10px">No.' + (i + 1) + '</span><span class="num">' + m.date.replace(/-/g, ".") + '</span><span><span class="mlog-res ' + (m.win ? "w" : "l") + '">' + (m.win ? "WIN" : "LOSE") + '</span> <span class="muted" style="font-size:12px">' + (ME_PJ[m.party] || esc(m.party)) + " · " + meDur(m.dur) + "</span></span></div>" +
+      team("ally") + '<span class="mono muted mlog-vs">VS</span>' + team("enemy") + "</li>";
+  }
+  function meLogList() {
+    var M = window.VEIL_MATCHES || [], P = mePicks(), only = S.meLogOnly === "todo";
+    var idx = M.map(function (m, i) { return i; }).reverse().filter(function (i) { return !only || !(P[i] && M[i].ally[P[i]]); });
+    if (!idx.length) return '<div class="empty" style="padding:44px 24px"><span class="tag">COMPLETE</span><h3>すべての試合で自分を選びました</h3></div>';
+    return '<ol class="mlog">' + idx.map(function (i) { return meLogRow(M[i], i); }).join("") + "</ol>";
+  }
+  function meLogHead() {
+    var n = (window.VEIL_MATCHES || []).length, k = mePickCount();
+    return '<div class="mlog-head"><div style="display:flex;flex-direction:column;gap:8px"><span class="mono gold" style="font-size:10px">自分を選んだ試合</span><span><span class="serif num" style="font-size:34px">' + k + '</span><span class="muted"> / ' + n + ' 試合</span></span><span class="mlog-prog"><i style="width:' + (n ? k / n * 100 : 0).toFixed(1) + '%"></i></span></div>' +
+      '<div class="fgroup" role="group" aria-label="表示する試合">' + chips("me-log", [["all", "すべて"], ["todo", "未選択だけ"]], S.meLogOnly || "all") + (k ? '<button class="chip" type="button" data-action="me-unpick-all">選択をすべて外す</button>' : "") + "</div></div>";
+  }
+  function meLog() {
+    return '<p class="sample-note"><span class="badge">見本</span>味方5体のうち、自分が使ったヒーローをクリックしてください。もう一度押すと外れます。選んだ内容は今はこのブラウザだけに保存され、ログインができたらDBに保存します。</p>' +
+      '<div id="mlog-head">' + meLogHead() + '</div><div id="mlog-list">' + meLogList() + "</div>";
+  }
+  function meSides(M, all) {
+    var ally = {}, enemy = {};
+    M.forEach(function (m) {
+      Object.keys(m.ally).forEach(function (L) { var id = m.ally[L]; if (id && CH[id]) (ally[id] = ally[id] || []).push(m); });
+      Object.keys(m.enemy).forEach(function (L) { var id = m.enemy[L]; if (id && CH[id]) (enemy[id] = enemy[id] || []).push(m); });
+    });
+    function top(map, dir) {
+      return Object.keys(map).map(function (id) { return { c: CH[id], r: meRec(map[id]) }; }).filter(function (x) { return x.r.games >= ME_MIN; })
+        .sort(function (a, b) { return dir * (b.r.wr - a.r.wr) || b.r.games - a.r.games; }).slice(0, 5)
+        .map(function (x) { return "<tr><td>" + meHero(x.c) + '</td><td class="num">' + x.r.games + '</td><td><span class="me-wr"><span class="num">' + pct(x.r.wr) + "</span>" + meBar(x.r.wr) + '</span></td><td class="num">' + mePt(x.r.wr - all.wr) + "</td></tr>"; });
+    }
+    var head = ["ヒーロー", "試合数", "あなたの勝率", "いつもとの差"];
+    return '<p class="muted" style="font-size:13px">' + ME_MIN + "試合以上いっしょになったヒーローだけを出しています。「いつもとの差」は、あなたの全体の勝率(" + pct(all.wr) + ")との差です。</p>" +
+      '<div class="me-two"><div><h3 class="subh" style="margin:0 0 12px">味方にいると勝ちやすい</h3>' + meTable(head, top(ally, 1)) + "</div>" +
+      '<div><h3 class="subh" style="margin:0 0 12px">敵にいると負けやすい</h3>' + meTable(head, top(enemy, -1)) + "</div></div>";
+  }
+  var ME_TABS = [["me-overview", "戦績", "RECORD"], ["me-heroes-tab", "英雄", "HEROES"], ["me-cond", "戦況", "FIELD"], ["me-sides", "盟友と宿敵", "BONDS"], ["me-log", "記録", "LOG"]];
+  function viewMe() {
+    var M = window.VEIL_MATCHES || [];
+    if (!M.length) return '<section class="section"><div class="wrap"><div class="empty"><h3>まだ試合が記録されていません</h3></div></div></section>';
+    var all = meRec(M), st = meStreaks(M), last10 = meRec(M.slice(-10));
+    var durW = M.filter(function (m) { return m.win && m.dur; }), durL = M.filter(function (m) { return !m.win && m.dur; });
+    var avgD = function (l) { return l.length ? l.reduce(function (a, m) { return a + m.dur; }, 0) / l.length : null; };
+    var parties = ["Solo", "Duo", "Trio", "5-stack"], PJ = { Solo: "ソロ", Duo: "デュオ(2人)", Trio: "トリオ(3人)", "5-stack": "5人パーティ" };
+    var partyRows = meGroupRows(parties.map(function (p) { return { label: PJ[p], r: meRec(M.filter(function (m) { return m.party === p; })) }; }), all);
+    var buckets = [["12分未満", 0, 720], ["12〜15分", 720, 900], ["15〜18分", 900, 1080], ["18分以上", 1080, 1e9]];
+    var durRows = meGroupRows(buckets.map(function (b) { return { label: b[0], r: meRec(M.filter(function (m) { return m.dur != null && m.dur >= b[1] && m.dur < b[2]; })) }; }), all);
+    var MI = window.VEIL_MATCH_INFO || {};
+    var cur = ME_TABS.some(function (t) { return t[0] === S.metab; }) ? S.metab : ME_TABS[0][0];
+    var MP = function (id) { return 'role="tabpanel" id="' + id + '" aria-labelledby="tab-' + id + '"' + (id === cur ? "" : " hidden"); };
+    return '<section class="phead">' + atmo({ h: 260, seed: 53 }) + '<div class="wrap">' + crumbs([["HOME", "#home"], ["MY PAGE"]]) +
+      '<div class="phead-row"><div style="display:flex;flex-direction:column;gap:14px"><h1 class="rise">MY RECORD</h1><p class="jp rise d1">あなたの戦いの記録。</p></div>' +
+      '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px"><span class="serif gold num" style="font-size:64px;line-height:1">' + all.wr.toFixed(1) + '<span style="font-size:26px">%</span></span><span class="mono muted">勝率 · ' + all.games + "試合 · 平均より " + mePt(all.wr - 50) + "</span></div></div></div></section>" +
+      '<section class="section tight" style="padding-top:0"><nav class="dtabs" aria-label="マイページの項目"><div class="wrap" role="tablist" aria-label="マイページ">' +
+      ME_TABS.map(function (t) { var on = cur === t[0]; return '<button type="button" class="dtab dtab2" role="tab" id="tab-' + t[0] + '" aria-controls="' + t[0] + '" aria-selected="' + on + '" tabindex="' + (on ? 0 : -1) + '" data-action="tab" data-target="' + t[0] + '"><span class="mono">' + t[2] + "</span>" + t[1] + "</button>"; }).join("") + "</div></nav>" +
+      '<div class="wrap" style="display:flex;flex-direction:column;gap:40px;padding-top:36px">' +
+      '<p class="sample-note"><span class="badge">VEIL集計</span>シートに記録した ' + all.games + " 試合(" + (MI.from || "").replace(/-/g, ".") + " 〜 " + (MI.to || "").replace(/-/g, ".") + ")を、あなたの試合として集計しています。ログインと試合登録ができたら、登録した試合もここに加わります。</p>" +
+      '<div ' + MP("me-overview") + ' style="display:flex;flex-direction:column;gap:72px"><div>' + secHead("01", "OVERVIEW", "全体の成績") + '<div class="me-tiles">' +
+        meTile("WIN RATE · 勝率", pct(all.wr), all.wins + "勝 " + (all.games - all.wins) + "敗") +
+        meTile("VS AVERAGE · 平均との差", mePt(all.wr - 50), "平均は50%(全員の勝ちと負けは同じ数)") +
+        meTile("LAST 10 · 直近10試合", pct(last10.wr), last10.wins + "勝 " + (last10.games - last10.wins) + "敗") +
+        meTile("STREAK · 今の流れ", st.cur + (st.curWin ? "連勝" : "連敗"), "最長 " + st.bestW + "連勝 / " + st.bestL + "連敗") +
+        meTile("TIME · 平均試合時間", meDur(avgD(M.filter(function (m) { return m.dur; }))), "勝ち " + meDur(avgD(durW)) + " / 負け " + meDur(avgD(durL))) +
+      "</div></div>" +
+      "<div>" + secHead("02", "TREND", "勝率の推移") + meTrend(M) + "</div></div>" +
+      "<div " + MP("me-heroes-tab") + ">" + secHead("03", "MY HEROES", "あなたのヒーロー") + '<div id="me-heroes" style="display:flex;flex-direction:column;gap:20px">' + meHeroes() + "</div></div>" +
+      "<div " + MP("me-cond") + ">" + secHead("04", "CONDITIONS", "条件ごとの成績") + '<p class="muted" style="font-size:13px;margin-bottom:16px">「全体との差」は、あなたの全体の勝率(' + pct(all.wr) + ")との差です。" + ME_MIN + "試合未満の行は「データ不足」として差を出していません。</p>" +
+        '<div class="me-two"><div><h3 class="subh" style="margin:0 0 12px">パーティ人数</h3>' + meTable(["人数", "試合数", "勝-敗", "勝率", "全体との差"], partyRows) + "</div>" +
+        '<div><h3 class="subh" style="margin:0 0 12px">試合時間</h3>' + meTable(["試合時間", "試合数", "勝-敗", "勝率", "全体との差"], durRows) + "</div></div></div>" +
+      "<div " + MP("me-sides") + ">" + secHead("05", "ALLIES &amp; ENEMIES", "味方と敵のヒーロー") + meSides(M, all) + "</div>" +
+      "<div " + MP("me-log") + ">" + secHead("06", "MATCH LOG", "試合ごとの記録") + '<div style="display:flex;flex-direction:column;gap:24px">' + meLog() + "</div></div>" +
+      "</div></section>";
+  }
+
+  /* ---------------- ACCOUNT · SUBMIT · REVIEW (Supabase) ----------------
+     Login is Discord through Supabase Auth: the site never sees or stores a password.
+     All writes go through database functions (submit_match, review_match, set_role …) that check the user's role. */
+  var CFG = window.VEIL_CONFIG || {}, SB = null;
+  var AUTH = { ready: false, user: null, role: null, name: "" };
+  var RANKS = ["Warrior", "Elite", "Master", "Grandmaster", "Epic", "Legend", "Mythic", "Mythical Honor", "Mythical Glory", "Mythical Immortal"];
+  var PARTIES = [["Solo", "ソロ"], ["Duo", "デュオ(2人)"], ["Trio", "トリオ(3人)"], ["5-stack", "5人パーティ"]];
+  var ROLE_JP = { member: "一般", trusted: "信頼ユーザー", approver: "承認係", admin: "管理者" };
+  var STATUS_JP = { pending: "承認待ち", approved: "承認済み", rejected: "却下" };
+  try {
+    if (CFG.supabaseUrl && CFG.supabaseKey && window.supabase && window.supabase.createClient)
+      SB = window.supabase.createClient(CFG.supabaseUrl, CFG.supabaseKey, { auth: { flowType: "pkce", detectSessionInUrl: true, persistSession: true, autoRefreshToken: true } });
+  } catch (e) { SB = null; }
+  function dbOn() { return !!SB; }
+  function canReview() { return AUTH.role === "approver" || AUTH.role === "admin"; }
+  function userName(u) { var m = (u && u.user_metadata) || {}; return m.full_name || m.name || (m.custom_claims && m.custom_claims.global_name) || m.user_name || "プレイヤー"; }
+  function dbErr(e) { var m = (e && (e.message || e.error_description)) || String(e || ""); return /Failed to fetch|NetworkError/i.test(m) ? "サーバーにつながりませんでした。通信を確かめて、もう一度試してください。" : m; }
+  function setUser(session) {
+    var u = session && session.user;
+    if (!u) { AUTH.user = null; AUTH.role = null; AUTH.name = ""; return Promise.resolve(); }
+    AUTH.user = u; AUTH.name = userName(u);
+    return SB.rpc("my_role").then(function (r) { AUTH.role = r.error ? null : r.data; });
+  }
+  if (SB) {
+    /* PKCE: Discord sends the user back with ?code=…; supabase-js trades it for a session, then the address is cleaned */
+    SB.auth.getSession().then(function (r) { return setUser(r.data && r.data.session); }).then(function () {
+      AUTH.ready = true;
+      if (/[?&]code=/.test(location.search) || /[?&]error=/.test(location.search)) {
+        var back = ""; try { back = sessionStorage.getItem("veil-return") || ""; sessionStorage.removeItem("veil-return"); } catch (e) {}
+        history.replaceState(null, "", location.pathname + (back || location.hash || "#home"));
+      }
+      render(true);
+    });
+    SB.auth.onAuthStateChange(function (ev, session) {
+      if (ev === "SIGNED_IN" || ev === "SIGNED_OUT" || ev === "USER_UPDATED") setUser(session).then(function () { if (AUTH.ready) render(true); });
+    });
+  }
+  function login() {
+    if (!SB) return;
+    try { sessionStorage.setItem("veil-return", location.hash || "#home"); } catch (e) {}
+    SB.auth.signInWithOAuth({ provider: "discord", options: { redirectTo: location.origin + location.pathname } }).then(function (r) { if (r.error) { S.loginErr = dbErr(r.error); render(true); } });
+  }
+  function logout() { if (SB) SB.auth.signOut().then(function () { go("#home"); }); }
+
+  var IC_DISCORD = '<svg class="ic" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M19.6 5.6A16.7 16.7 0 0 0 15.5 4.3l-.5 1a15.4 15.4 0 0 0-6 0l-.5-1a16.6 16.6 0 0 0-4.1 1.3C1.8 9.5 1.1 13.3 1.4 17a16.8 16.8 0 0 0 5.1 2.6l1.1-1.7a10.8 10.8 0 0 1-1.7-.8l.4-.3a11.9 11.9 0 0 0 11.4 0l.4.3c-.5.3-1.1.6-1.7.8l1.1 1.7a16.7 16.7 0 0 0 5.1-2.6c.4-4.3-.7-8-3-11.4ZM8.5 14.7c-1 0-1.8-.9-1.8-2s.8-2 1.8-2 1.8.9 1.8 2-.8 2-1.8 2Zm7 0c-1 0-1.8-.9-1.8-2s.8-2 1.8-2 1.8.9 1.8 2-.8 2-1.8 2Z"/></svg>';
+  function accountBtn(cur) {
+    if (!SB) return "";
+    if (!AUTH.ready) return '<span class="icon-btn acct-btn" aria-hidden="true"></span>';
+    if (!AUTH.user) return '<button class="icon-btn acct-btn login" type="button" data-action="login" title="Discordでログイン">' + IC_DISCORD + '<span>LOGIN</span></button>';
+    return '<a class="icon-btn acct-btn' + (cur === "account" ? " on" : "") + '" href="#account" title="' + esc(AUTH.name) + ' のアカウント"><span class="acct-ini">' + esc(AUTH.name.slice(0, 1).toUpperCase()) + "</span></a>";
+  }
+  function acctHead(title, jp, crumb) {
+    return '<section class="phead">' + atmo({ h: 220, seed: 71 }) + '<div class="wrap">' + crumbs([["HOME", "#home"], [crumb]]) +
+      '<div class="phead-row"><div style="display:flex;flex-direction:column;gap:14px"><h1 class="rise">' + title + '</h1><p class="jp rise d1">' + jp + "</p></div></div></div></section>";
+  }
+  /* shown instead of a page when the database or the login is not there yet */
+  function acctGate(needRole) {
+    if (!SB) return '<div class="empty"><span class="tag dim">準備中</span><h3>データベースにまだつながっていません</h3><p class="muted" style="font-size:14px;max-width:560px">試合の登録と承認は、Supabaseの準備ができたら使えるようになります。</p></div>';
+    if (!AUTH.ready) return '<div class="empty"><span class="tag dim">LOADING</span><h3>ログイン状態を確かめています…</h3></div>';
+    if (!AUTH.user) return '<div class="empty"><span class="tag dim">LOGIN</span><h3>Discordでログインしてください</h3><p class="muted" style="font-size:14px;max-width:560px">見るだけならログインはいりません。試合を登録するときだけ、Discordでログインします。パスワードはこのサイトに保存されません。</p><button class="btn primary" type="button" data-action="login">' + IC_DISCORD + "Discordでログイン</button>" + (S.loginErr ? '<p class="sub-msg bad">' + esc(S.loginErr) + "</p>" : "") + "</div>";
+    if (needRole && !needRole()) return '<div class="empty"><span class="tag warn">NO ACCESS</span><h3>このページを見る権限がありません</h3><p class="muted" style="font-size:14px">承認係か管理者だけが使えるページです。</p></div>';
+    return "";
+  }
+
+  /* ----- account page ----- */
+  function viewAccount() {
+    var g = acctGate();
+    return acctHead("ACCOUNT", "あなたのアカウント", "ACCOUNT") + '<section class="section tight"><div class="wrap" style="display:flex;flex-direction:column;gap:32px">' + (g ||
+      '<div class="acct-card"><span class="acct-ini big">' + esc(AUTH.name.slice(0, 1).toUpperCase()) + '</span><div style="display:flex;flex-direction:column;gap:6px"><span class="mincho" style="font-size:24px">' + esc(AUTH.name) + '</span><span class="mono muted" style="font-size:11px">DISCORD · ' + esc(ROLE_JP[AUTH.role] || "—") + "</span></div></div>" +
+      '<div class="acct-links"><a class="card acct-link" href="#submit"><span class="mono gold" style="font-size:10px">SUBMIT</span><span class="mincho" style="font-size:20px">試合を登録する</span><span class="muted" style="font-size:13px">' + (AUTH.role === "member" ? "登録した試合は、承認されてから集計に入ります。" : "登録した試合は、すぐ集計に入ります(同じ試合がすでにあるときは承認待ち)。") + "</span></a>" +
+      (canReview() ? '<a class="card acct-link" href="#review"><span class="mono gold" style="font-size:10px">REVIEW</span><span class="mincho" style="font-size:20px">承認する</span><span class="muted" style="font-size:13px">承認待ちの試合を確認します。' + (AUTH.role === "admin" ? "メンバーの役割もここで変えられます。" : "") + "</span></a>" : "") +
+      '<a class="card acct-link" href="#me"><span class="mono gold" style="font-size:10px">MY PAGE</span><span class="mincho" style="font-size:20px">マイページ</span><span class="muted" style="font-size:13px">自分の勝率や得意ヒーローを見ます。</span></a></div>' +
+      '<div><button class="btn ghost" type="button" data-action="logout">ログアウト</button></div>') + "</div></section>";
+  }
+
+  /* ----- submit page ----- */
+  var HERO_BY_NAME = null;
+  function heroIndex() {
+    if (HERO_BY_NAME) return HERO_BY_NAME;
+    HERO_BY_NAME = {};
+    D.champions.forEach(function (c) { [c.name, c.en, c.name + " (" + c.en + ")", c.id].forEach(function (k) { HERO_BY_NAME[heroKey(k)] = c.id; }); });
+    return HERO_BY_NAME;
+  }
+  function heroKey(v) { return String(v || "").toLowerCase().replace(/\s+/g, "").replace(/[\u3041-\u3096]/g, function (ch) { return String.fromCharCode(ch.charCodeAt(0) + 0x60); }); }
+  /* exact name (日本語 / English / "日本語 (English)"), hiragana allowed; otherwise a unique prefix of at least 2 letters */
+  function heroFromInput(v) {
+    var k = heroKey(v); if (!k) return null;
+    var idx = heroIndex(); if (idx[k]) return idx[k];
+    if (k.length < 2) return null;
+    var hit = D.champions.filter(function (c) { return heroKey(c.name).indexOf(k) === 0 || heroKey(c.en).indexOf(k) === 0; });
+    return hit.length === 1 ? hit[0].id : null;
+  }
+  function heroDatalist() {
+    return '<datalist id="hero-names">' + D.champions.slice().sort(function (a, b) { return a.name.localeCompare(b.name, "ja"); }).map(function (c) { return '<option value="' + esc(c.name + " (" + c.en + ")") + '"></option>'; }).join("") + "</datalist>";
+  }
+  function subRow(side, L) {
+    var own = side === "ally", id = "f-" + side + "-" + L;
+    return '<div class="sub-row" data-side="' + side + '" data-lane="' + L + '"><span class="mono sub-lane">' + L + '</span><span class="sub-face" id="' + id + '-face"><span class="portrait sm"></span></span>' +
+      '<label class="sr" for="' + id + '">' + (own ? "味方" : "敵") + "の" + L + '</label><input id="' + id + '" class="sub-hero" list="hero-names" autocomplete="off" placeholder="ヒーロー名" data-hero-input="' + id + '">' +
+      (own ? '<label class="sub-me" title="自分が使ったヒーロー"><input type="radio" name="f-me" value="' + L + '"><span>自分</span></label>' : '<span class="sub-me-pad"></span>') +
+      '<span class="sub-kda" role="group" aria-label="' + (own ? "味方" : "敵") + "の" + L + 'のKDA">' + ["K", "D", "A"].map(function (x) { return '<input type="number" inputmode="numeric" min="0" max="99" placeholder="' + x + '" aria-label="' + x + '" data-kda="' + x + '">'; }).join("") + "</span></div>";
+  }
+  function viewSubmit() {
+    var g = acctGate(), today = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+    var sel = function (id, label, opts, val) { return '<label class="sub-field"><span class="mono">' + label + '</span><select id="' + id + '">' + opts.map(function (o) { return '<option value="' + esc(o[0]) + '"' + (o[0] === val ? " selected" : "") + ">" + esc(o[1]) + "</option>"; }).join("") + "</select></label>"; };
+    var last = S.subLast || {};
+    return acctHead("SUBMIT", "試合を登録する", "SUBMIT") + '<section class="section tight"><div class="wrap" style="display:flex;flex-direction:column;gap:48px">' + (g ||
+      '<form id="sub-form" class="sub-form" novalidate>' + heroDatalist() +
+        '<div class="sub-meta">' +
+          '<label class="sub-field"><span class="mono">日付</span><input type="date" id="f-date" value="' + (last.date || today) + '" max="' + today + '" required></label>' +
+          sel("f-rank", "ランク帯", [["", "—"]].concat(RANKS.map(function (r) { return [r, r]; })), last.rank || "Mythic") +
+          sel("f-party", "人数", PARTIES, last.party || "Solo") +
+          '<label class="sub-field"><span class="mono">試合時間</span><input id="f-dur" placeholder="14:22" inputmode="numeric" pattern="\\d{1,2}:\\d{2}"></label>' +
+          '<label class="sub-field"><span class="mono">シーズン</span><input id="f-season" placeholder="例: S42" maxlength="10" value="' + esc(last.season || "") + '"></label>' +
+        "</div>" +
+        '<fieldset class="sub-res"><legend class="mono">結果(自分のチーム)</legend><label><input type="radio" name="f-win" value="1"><span>WIN 勝ち</span></label><label><input type="radio" name="f-win" value="0"><span>LOSE 負け</span></label></fieldset>' +
+        '<div class="sub-teams"><div class="sub-team"><h3 class="subh" style="margin:0">味方 <small class="muted">自分を選んで、自分のKDAは必ず入れてください</small></h3>' + LANE_ORDER.map(function (L) { return subRow("ally", L); }).join("") + "</div>" +
+        '<div class="sub-team"><h3 class="subh" style="margin:0">敵 <small class="muted">KDAは分かれば</small></h3>' + LANE_ORDER.map(function (L) { return subRow("enemy", L); }).join("") + "</div></div>" +
+        '<label class="sub-field wide"><span class="mono">メモ(任意 · 承認係に伝えたいこと)</span><input id="f-note" maxlength="300"></label>' +
+        '<div class="sub-actions"><button class="btn primary" type="submit" id="sub-send">登録する' + IC.arrow + '</button><span id="sub-msg" class="sub-msg" role="status" aria-live="polite"></span></div>' +
+      "</form>" +
+      "<div>" + secHead("—", "MY SUBMISSIONS", "あなたが登録した試合") + '<div id="my-subs"><p class="muted">読み込み中…</p></div></div>') + "</div></section>";
+  }
+  function subFace(input) {
+    var id = heroFromInput(input.value), face = document.getElementById(input.id + "-face");
+    input.classList.toggle("ok", !!id); input.classList.toggle("bad", !!input.value && !id);
+    if (face) face.innerHTML = id ? portrait(CH[id], true) : '<span class="portrait sm"></span>';
+  }
+  function readForm() {
+    var f = document.getElementById("sub-form"), out = { ally: {}, enemy: {}, kda: { ally: {}, enemy: {} } }, errs = [], used = {};
+    out.played_on = f.querySelector("#f-date").value; out.rank = f.querySelector("#f-rank").value; out.party = f.querySelector("#f-party").value;
+    out.season = f.querySelector("#f-season").value.trim(); out.note = f.querySelector("#f-note").value.trim();
+    var w = f.querySelector('input[name="f-win"]:checked'); if (!w) errs.push("勝ち・負けを選んでください"); else out.win = w.value === "1";
+    var me = f.querySelector('input[name="f-me"]:checked'); if (!me) errs.push("味方のうち、自分のヒーローを選んでください"); else out.my_lane = me.value;
+    var dur = f.querySelector("#f-dur").value.trim(), dm = dur.match(/^(\d{1,2})[:：](\d{2})$/);
+    if (dur && !dm) errs.push("試合時間は 14:22 のように「分:秒」で入れてください"); else if (dm) out.duration_sec = Number(dm[1]) * 60 + Number(dm[2]);
+    if (!out.played_on) errs.push("日付を入れてください");
+    f.querySelectorAll(".sub-row").forEach(function (row) {
+      var side = row.getAttribute("data-side"), L = row.getAttribute("data-lane"), inp = row.querySelector(".sub-hero"), id = heroFromInput(inp.value);
+      if (!id) errs.push((side === "ally" ? "味方" : "敵") + "の " + L + (inp.value ? " のヒーロー名が見つかりません" : " のヒーローが空です"));
+      else if (used[id]) errs.push(CH[id].name + " が2回入っています"); else used[id] = 1;
+      out[side][L] = id;
+      var k = row.querySelectorAll("[data-kda]"), v = [].map.call(k, function (x) { return x.value === "" ? null : Number(x.value); });
+      if (v.every(function (x) { return x != null; })) { if (v.some(function (x) { return !(x >= 0 && x <= 99 && Math.floor(x) === x); })) errs.push((side === "ally" ? "味方" : "敵") + "の " + L + " のKDAは0〜99の整数で入れてください"); else out.kda[side][L] = v; }
+      else if (v.some(function (x) { return x != null; })) errs.push((side === "ally" ? "味方" : "敵") + "の " + L + " のKDAは3つとも入れるか、空にしてください");
+    });
+    if (out.my_lane && !out.kda.ally[out.my_lane]) errs.push("自分のKDAを入れてください");
+    return { payload: out, errs: errs };
+  }
+  function sendForm() {
+    var r = readForm(), msg = document.getElementById("sub-msg"), btn = document.getElementById("sub-send");
+    if (r.errs.length) { msg.className = "sub-msg bad"; msg.innerHTML = r.errs.slice(0, 4).map(esc).join("<br>") + (r.errs.length > 4 ? "<br>ほか " + (r.errs.length - 4) + " 件" : ""); return; }
+    btn.disabled = true; msg.className = "sub-msg"; msg.textContent = "送信中…";
+    SB.rpc("submit_match", { payload: r.payload }).then(function (res) {
+      btn.disabled = false;
+      if (res.error) { msg.className = "sub-msg bad"; msg.textContent = dbErr(res.error); return; }
+      var d = res.data || {};
+      S.subLast = { date: r.payload.played_on, rank: r.payload.rank, party: r.payload.party, season: r.payload.season };
+      msg.className = "sub-msg ok";
+      msg.textContent = d.status === "approved" ? "登録しました(No." + d.id + ")。集計には15分ほどで反映されます。" : "登録しました(No." + d.id + ")。承認されると集計に入ります。" + (d.dup_of ? "同じ試合(No." + d.dup_of + ")がすでにあるので、承認係が確認します。" : "");
+      var f = document.getElementById("sub-form");
+      f.querySelectorAll(".sub-hero, [data-kda], #f-note, #f-dur").forEach(function (x) { x.value = ""; if (x.classList.contains("sub-hero")) subFace(x); });
+      f.querySelectorAll('input[name="f-win"], input[name="f-me"]').forEach(function (x) { x.checked = false; });
+      loadMySubs();
+    });
+  }
+  function teamFaces(picks, side, opts) {
+    opts = opts || {};
+    return '<div class="rv-team ' + side + '">' + LANE_ORDER.map(function (L) {
+      var p = picks.filter(function (x) { return x.side === side && x.lane === L; })[0] || {}, c = CH[p.hero];
+      return '<span class="rv-h' + (p.me ? " me" : "") + '" title="' + esc((c ? c.name : p.hero || "?") + " (" + L + ")") + '">' + (c ? portrait(c, true) : '<span class="portrait sm"></span>') + '<span class="mono">' + L + "</span>" +
+        (p.k != null ? '<span class="num rv-kda">' + p.k + "/" + p.d + "/" + p.a + "</span>" : "") + (p.me ? "<b>" + (opts.meLabel || "YOU") + "</b>" : "") + "</span>";
+    }).join("") + "</div>";
+  }
+  function loadMySubs() {
+    var box = document.getElementById("my-subs"); if (!box || !SB) return;
+    SB.rpc("my_matches", { lim: 200 }).then(function (res) {
+      if (!document.getElementById("my-subs")) return;
+      if (res.error) { box.innerHTML = '<p class="sub-msg bad">' + esc(dbErr(res.error)) + "</p>"; return; }
+      var rows = res.data || [];
+      if (!rows.length) { box.innerHTML = '<p class="muted" style="font-size:14px">まだ登録した試合はありません。</p>'; return; }
+      box.innerHTML = '<ol class="mlog">' + rows.map(function (m) {
+        var picks = Object.keys(m.picks || {}).map(function (k) { var a = k.split(":"); var me = a[0] === "ally" && a[1] === m.my_lane; return { side: a[0], lane: a[1], hero: m.picks[k], me: me, k: me ? m.k : null, d: me ? m.d : null, a: me ? m.a : null }; });
+        return '<li class="mlog-row sub-mine"><div class="mlog-info"><span class="mono muted" style="font-size:10px">No.' + m.id + '</span><span class="num">' + esc(String(m.played_on).replace(/-/g, ".")) + '</span><span><span class="mlog-res ' + (m.win ? "w" : "l") + '">' + (m.win ? "WIN" : "LOSE") + '</span> <span class="tag ' + (m.status === "approved" ? "" : m.status === "rejected" ? "warn" : "dim") + '" style="font-size:9px;padding:2px 6px">' + STATUS_JP[m.status] + "</span></span>" +
+          (m.reject_reason ? '<span class="muted" style="font-size:12px">理由: ' + esc(m.reject_reason) + "</span>" : "") +
+          (m.status !== "approved" ? '<button class="chip" type="button" data-action="sub-withdraw" data-id="' + m.id + '" style="min-height:32px;align-self:flex-start">取り下げる</button>' : "") + "</div>" +
+          teamFaces(picks, "ally") + '<span class="mono muted mlog-vs">VS</span>' + teamFaces(picks, "enemy") + "</li>";
+      }).join("") + "</ol>";
+    });
+  }
+
+  /* ----- review page (approvers) + roles (admin) ----- */
+  function viewReview() {
+    var g = acctGate(canReview);
+    return acctHead("REVIEW", "承認待ちの試合", "REVIEW") + '<section class="section tight"><div class="wrap" style="display:flex;flex-direction:column;gap:72px">' + (g ||
+      "<div>" + secHead("01", "PENDING", "承認待ち") + '<p class="muted" style="font-size:13px;margin-bottom:16px">内容が正しければ承認してください。承認した試合は15分ほどで集計に入ります。同じ試合が二重に登録されたときは、片方を却下してください。</p><div id="rv-list"><p class="muted">読み込み中…</p></div></div>' +
+      (AUTH.role === "admin" ? "<div>" + secHead("02", "MEMBERS", "メンバーと役割") + '<p class="muted" style="font-size:13px;margin-bottom:16px">一般 = 承認が必要 / 信頼ユーザー = すぐ集計に入る / 承認係 = 承認もできる / 管理者 = 役割も変えられる</p><div id="rv-members"><p class="muted">読み込み中…</p></div></div>' : "")) + "</div></section>";
+  }
+  function loadReview() {
+    var box = document.getElementById("rv-list"); if (!box || !SB) return;
+    SB.rpc("pending_matches", { lim: 100 }).then(function (res) {
+      if (!document.getElementById("rv-list")) return;
+      if (res.error) { box.innerHTML = '<p class="sub-msg bad">' + esc(dbErr(res.error)) + "</p>"; return; }
+      var rows = res.data || [];
+      if (!rows.length) { box.innerHTML = '<div class="empty" style="padding:44px 24px"><span class="tag">CLEAR</span><h3>承認待ちの試合はありません</h3></div>'; return; }
+      box.innerHTML = '<ol class="mlog">' + rows.map(function (m) {
+        return '<li class="mlog-row rv-row" id="rv-' + m.id + '"><div class="mlog-info"><span class="mono muted" style="font-size:10px">No.' + m.id + " · " + esc(m.submitter || "?") + "(" + esc(ROLE_JP[m.submitter_role] || "") + ')</span><span class="num">' + esc(String(m.played_on).replace(/-/g, ".")) + '</span><span><span class="mlog-res ' + (m.win ? "w" : "l") + '">' + (m.win ? "WIN" : "LOSE") + '</span> <span class="muted" style="font-size:12px">' + esc(m.rank || "—") + " · " + esc((PARTIES.filter(function (p) { return p[0] === m.party; })[0] || ["", m.party || "—"])[1]) + " · " + meDur(m.duration_sec) + "</span></span>" +
+          (m.dup_of ? '<span class="tag warn" style="font-size:9px;padding:2px 6px;align-self:flex-start">No.' + m.dup_of + " と同じ試合かも</span>" : "") + (m.note ? '<span class="muted" style="font-size:12px">メモ: ' + esc(m.note) + "</span>" : "") +
+          '<span class="rv-btns"><button class="chip on-gold" type="button" data-action="rv-ok" data-id="' + m.id + '">承認</button><button class="chip" type="button" data-action="rv-ng" data-id="' + m.id + '">却下</button></span></div>' +
+          teamFaces(m.picks || [], "ally", { meLabel: "SENDER" }) + '<span class="mono muted mlog-vs">VS</span>' + teamFaces(m.picks || [], "enemy") + "</li>";
+      }).join("") + "</ol>";
+    });
+    var mb = document.getElementById("rv-members"); if (!mb) return;
+    SB.rpc("list_profiles").then(function (res) {
+      if (!document.getElementById("rv-members")) return;
+      if (res.error) { mb.innerHTML = '<p class="sub-msg bad">' + esc(dbErr(res.error)) + "</p>"; return; }
+      mb.innerHTML = meTable(["名前", "役割", "承認済み", "承認待ち", "登録日"], (res.data || []).map(function (p) {
+        return "<tr><td>" + esc(p.name || "(名前なし)") + (AUTH.user && p.id === AUTH.user.id ? ' <span class="tag dim me-thin">あなた</span>' : "") + '</td><td><select class="rv-role" data-uid="' + p.id + '" aria-label="' + esc(p.name) + ' の役割">' + Object.keys(ROLE_JP).map(function (k) { return '<option value="' + k + '"' + (k === p.role ? " selected" : "") + ">" + ROLE_JP[k] + "</option>"; }).join("") + '</select></td><td class="num">' + p.approved + '</td><td class="num">' + p.pending + '</td><td class="num muted">' + esc(String(p.created_at).slice(0, 10).replace(/-/g, ".")) + "</td></tr>";
+      }));
+    });
+  }
+  function reviewAsk(id) {
+    var row = document.getElementById("rv-" + id); if (!row) return;
+    row.querySelector(".rv-btns").innerHTML = '<label class="sr" for="rv-why-' + id + '">却下する理由</label><input id="rv-why-' + id + '" class="rv-why" maxlength="200" placeholder="却下する理由(登録した人に見えます)" value="内容が正しくないため">' +
+      '<button class="chip" type="button" data-action="rv-ng-go" data-id="' + id + '">却下する</button><button class="chip" type="button" data-action="rv-ng-cancel" data-id="' + id + '">やめる</button>';
+    var w = document.getElementById("rv-why-" + id); if (w) { w.focus(); w.select(); }
+  }
+  function reviewOne(id, ok, btn) {
+    var reason = null;
+    if (!ok) { var w = document.getElementById("rv-why-" + id); reason = w ? w.value.trim() : ""; }
+    btn.disabled = true;
+    SB.rpc("review_match", { match_id: Number(id), approve: ok, reason: reason }).then(function (res) {
+      var row = document.getElementById("rv-" + id);
+      if (res.error) { btn.disabled = false; if (row) { var em = row.querySelector(".rv-err") || row.querySelector(".mlog-info").appendChild(document.createElement("span")); em.className = "sub-msg bad rv-err"; em.textContent = dbErr(res.error); } return; }
+      if (row) { row.classList.add("rv-done"); row.querySelector(".rv-btns").innerHTML = '<span class="tag' + (ok ? "" : " warn") + '">' + (ok ? "承認しました" : "却下しました") + "</span>"; }
+    });
+  }
+
   /* ---------------- layout ---------------- */
-  var NAV = [["home", "HOME"], ["champions", "CHAMPIONS"], ["equipment", "EQUIPMENT"], ["matchup", "MATCHUP LAB"], ["patch", "PATCH &amp; META"], ["lore", "LORE ARCHIVE"]];
+  var NAV = [["home", "HOME"], ["me", "MY PAGE"], ["champions", "CHAMPIONS"], ["equipment", "EQUIPMENT"], ["matchup", "MATCHUP LAB"], ["patch", "PATCH &amp; META"], ["lore", "LORE ARCHIVE"]];
   function header(cur) {
     return '<header class="site-header"><div class="wrap"><a class="logo" href="#home">' + LOGO + "<span>VEIL</span></a>" +
       '<nav class="nav" id="main-nav" aria-label="メインナビゲーション">' + NAV.map(function (n) { return '<a href="#' + n[0] + '"' + (cur === n[0] ? ' aria-current="page"' : "") + ">" + n[1] + "</a>"; }).join("") + "</nav>" +
-      '<div class="head-tools"><span class="tag demo-pill">DEMO DATA</span><a class="icon-btn' + (cur === "roulette" ? " on" : "") + '" href="#roulette" aria-label="ヒーロールーレット" title="ヒーロールーレット">' + IC.dice + '</a><button class="icon-btn" type="button" data-action="open-search" aria-label="サイト内検索">' + IC.search + '</button><button class="icon-btn menu-btn" type="button" data-action="menu" aria-label="メニューを開く" aria-expanded="false" aria-controls="main-nav">' + IC.menu + "</button></div></div></header>";
+      '<div class="head-tools"><span class="tag demo-pill">DEMO DATA</span>' + accountBtn(cur) + '<a class="icon-btn' + (cur === "roulette" ? " on" : "") + '" href="#roulette" aria-label="ヒーロールーレット" title="ヒーロールーレット">' + IC.dice + '</a><button class="icon-btn" type="button" data-action="open-search" aria-label="サイト内検索">' + IC.search + '</button><button class="icon-btn menu-btn" type="button" data-action="menu" aria-label="メニューを開く" aria-expanded="false" aria-controls="main-nav">' + IC.menu + "</button></div></div></header>";
   }
   function footer() {
     return '<footer class="site-footer"><div class="wrap top"><div style="display:flex;flex-direction:column;gap:16px"><a class="logo" href="#home">' + LOGO + "<span>VEIL</span></a>" +
       '<p class="disclaimer">本サイトはMoontonとは無関係の非公式ファンサイトです。Mobile Legends: Bang Bang、ヒーロー名、アートワーク等の権利はMoontonに帰属します。掲載中のキャラクター・数値はすべて開発用のサンプル(DEMO)です。</p></div>' +
-      '<div class="cols"><div class="col"><span class="mono gold">DATABASE</span><a href="#champions">キャラクター図鑑</a><a href="#roulette">ヒーロールーレット</a><a href="#equipment">装備一覧</a><a href="#matchup">対面攻略</a><a href="#patch">パッチ・メタ</a></div><div class="col"><span class="mono gold">ARCHIVE</span><a href="#lore">世界観</a><a href="#home">HOME</a></div></div></div>' +
+      '<div class="cols"><div class="col"><span class="mono gold">DATABASE</span><a href="#me">マイページ</a><a href="#champions">キャラクター図鑑</a><a href="#roulette">ヒーロールーレット</a><a href="#equipment">装備一覧</a><a href="#matchup">対面攻略</a><a href="#patch">パッチ・メタ</a></div><div class="col"><span class="mono gold">ARCHIVE</span><a href="#lore">世界観</a><a href="#home">HOME</a></div></div></div>' +
       '<div class="wrap bottom"><span class="mono muted">EVERY BATTLE LEAVES A TRACE.</span><span class="mono muted">VEIL · PROTOTYPE v0.2</span></div></footer>';
   }
 
@@ -716,6 +1137,10 @@
     if (h === "home") return { nav: "home", html: viewHome() };
     if (h === "champions") return { nav: "champions", html: viewChampions() };
     if (h === "roulette") return { nav: "roulette", html: viewRoulette() };
+    if (h === "me") return { nav: "me", html: viewMe(), title: "MY PAGE — VEIL" };
+    if (h === "account") return { nav: "account", html: viewAccount(), title: "ACCOUNT — VEIL" };
+    if (h === "submit") return { nav: "account", html: viewSubmit(), title: "SUBMIT — VEIL", after: loadMySubs };
+    if (h === "review") return { nav: "account", html: viewReview(), title: "REVIEW — VEIL", after: loadReview };
     if ((m = h.match(/^champion-([a-z]+)$/))) return { nav: "champions", html: viewChampion(m[1]) };
     if (h === "equipment") return { nav: "equipment", html: viewEquipment() };
     if (h === "emblem") return { nav: "equipment", html: viewEmblem(), title: "EMBLEM — VEIL" };
@@ -732,6 +1157,7 @@
   function render(keepScroll) {
     var r = route();
     app.innerHTML = header(r.nav) + '<main id="view" tabindex="-1">' + r.html + "</main>" + footer();
+    if (r.after && dbOn() && AUTH.user) setTimeout(r.after, 0);
     if (r.focus) { var el = document.getElementById(r.focus); if (el) setTimeout(function () { el.scrollIntoView({ block: "center" }); }, 60); }
     else if (!keepScroll) window.scrollTo(0, 0);
     var titles = { roulette: "ROULETTE — VEIL", home: "VEIL", champions: "CHAMPIONS — VEIL", equipment: "EQUIPMENT — VEIL", matchup: "MATCHUP LAB — VEIL", lore: "LORE ARCHIVE — VEIL", patch: "PATCH & META — VEIL" };
@@ -749,6 +1175,21 @@
       document.querySelectorAll(".dbg img, .dbody-art").forEach(function (im) { im.src = A2.img; im.style.objectPosition = pos2; });
       var cr = document.querySelector(".dbg-credit"); if (cr) cr.textContent = (A2.name ? A2.name + " · " : "") + (A2.credit || "© MOONTON");
       t.textContent = "SKIN " + (A2.i + 1) + " / " + A2.n + " ↻"; return; }
+    if (act === "login") { S.loginErr = ""; login(); return; }
+    if (act === "logout") { logout(); return; }
+    if (act === "sub-withdraw") { t.disabled = true; SB.rpc("withdraw_match", { match_id: Number(t.getAttribute("data-id")) }).then(function (res) { if (res.error) { t.disabled = false; t.textContent = dbErr(res.error); } else loadMySubs(); }); return; }
+    if (act === "rv-ok") { reviewOne(t.getAttribute("data-id"), true, t); return; }
+    if (act === "rv-ng") { reviewAsk(t.getAttribute("data-id")); return; }
+    if (act === "rv-ng-go") { reviewOne(t.getAttribute("data-id"), false, t); return; }
+    if (act === "rv-ng-cancel") { var rr = document.getElementById("rv-" + t.getAttribute("data-id")); if (rr) rr.querySelector(".rv-btns").innerHTML = '<button class="chip on-gold" type="button" data-action="rv-ok" data-id="' + t.getAttribute("data-id") + '">承認</button><button class="chip" type="button" data-action="rv-ng" data-id="' + t.getAttribute("data-id") + '">却下</button>'; return; }
+    if (act === "me-pick") {
+      var pi = t.getAttribute("data-i"), pl = t.getAttribute("data-lane"), PK = mePicks();
+      if (PK[pi] === pl) delete PK[pi]; else PK[pi] = pl; meSavePicks(PK);
+      var row = document.getElementById("mlog-" + pi), Mx = window.VEIL_MATCHES || [];
+      if (row) { if (S.meLogOnly === "todo" && PK[pi]) row.classList.add("picked", "leaving"); var tmp = document.createElement("div"); tmp.innerHTML = meLogRow(Mx[pi], Number(pi)); var nr = tmp.firstChild; row.replaceWith(nr); var nb = nr.querySelector('[data-lane="' + pl + '"]'); if (nb) nb.focus(); }
+      document.getElementById("mlog-head").innerHTML = meLogHead();
+      var mh2 = document.getElementById("me-heroes"); if (mh2) mh2.innerHTML = meHeroes(); return; }
+    if (act === "me-unpick-all") { meSavePicks({}); document.getElementById("mlog-head").innerHTML = meLogHead(); document.getElementById("mlog-list").innerHTML = meLogList(); var mh3 = document.getElementById("me-heroes"); if (mh3) mh3.innerHTML = meHeroes(); return; }
     if (act === "rl-spin") { if (!document.getElementById("rl-strip-wrap")) return; rlSpin(); return; }
     if (act === "rl-ex") { var ex = rlEx(), xid = t.getAttribute("data-id"); if (ex.indexOf(xid) < 0) ex.push(xid); rlSetEx(ex); S.rl.last = null; document.getElementById("rl-out").innerHTML = '<p class="muted rl-note">' + esc(CH[xid].name) + ' を候補から外しました。</p>'; document.getElementById("rl-ex").innerHTML = rlExList(); rlCount(); return; }
     if (act === "rl-unex") { rlSetEx(rlEx().filter(function (x) { return x !== t.getAttribute("data-id"); })); document.getElementById("rl-ex").innerHTML = rlExList(); rlCount(); return; }
@@ -758,6 +1199,8 @@
     if (act === "filter") {
       var g = t.getAttribute("data-group"), v = t.getAttribute("data-value");
       if (g === "rl-lane" || g === "rl-cls") { S.rl[g === "rl-lane" ? "lane" : "cls"] = v; document.querySelectorAll('[data-group="' + g + '"]').forEach(function (b) { b.setAttribute("aria-pressed", String(b.getAttribute("data-value") === v)); }); if (!S.rl.spinning) document.getElementById("rl-strip-wrap").innerHTML = rlReelIdle(); rlCount(); return; }
+      if (g === "me-lane") { meSetLane(v); var mh = document.getElementById("me-heroes"); if (mh) mh.innerHTML = meHeroes(); return; }
+      if (g === "me-log") { S.meLogOnly = v; document.querySelectorAll('[data-group="me-log"]').forEach(function (b) { b.setAttribute("aria-pressed", String(b.getAttribute("data-value") === v)); }); document.getElementById("mlog-list").innerHTML = meLogList(); return; }
       if (g === "icat") { S.itf.cat = v; document.querySelectorAll('[data-group="' + g + '"]').forEach(function (b) { b.setAttribute("aria-pressed", String(b.getAttribute("data-value") === v)); }); document.getElementById("item-grid").innerHTML = itemGrid(); return; }
       if (g === "meta-role") { S.meta.role = v; document.querySelectorAll('[data-group="meta-role"]').forEach(function (b) { b.setAttribute("aria-pressed", String(b.getAttribute("data-value") === v)); }); document.getElementById("meta-table").innerHTML = metaTable(); return; }
       S.cf[g] = v;
@@ -809,16 +1252,20 @@
     if (t.getAttribute("data-input") === "cf-q") { S.cf.q = t.value; document.getElementById("champ-grid").innerHTML = champGrid(); }
     if (t.getAttribute("data-input") === "it-q") { S.itf.q = t.value; document.getElementById("item-grid").innerHTML = itemGrid(); }
     if (t.id === "search-input") runSearch(t.value);
+    if (t.hasAttribute && t.hasAttribute("data-hero-input")) subFace(t);
   });
   document.addEventListener("change", function (ev) {
     var t = ev.target, b = t.getAttribute("data-bind");
     if (b === "cf-sort") { S.cf.sort = t.value; document.getElementById("champ-grid").innerHTML = champGrid(); }
+    if (t.hasAttribute && t.hasAttribute("data-hero-input")) { var hid2 = heroFromInput(t.value); if (hid2) t.value = CH[hid2].name + " (" + CH[hid2].en + ")"; subFace(t); return; }
+    if (t.classList && t.classList.contains("rv-role")) { t.disabled = true; SB.rpc("set_role", { target: t.getAttribute("data-uid"), new_role: t.value }).then(function (res) { t.disabled = false; if (res.error) { var e2 = document.createElement("span"); e2.className = "sub-msg bad"; e2.textContent = dbErr(res.error); t.parentNode.appendChild(e2); loadReview(); } }); return; }
     if (b === "it-sort") { S.itf.sort = t.value; document.getElementById("item-grid").innerHTML = itemGrid(); }
     if (b === "q-you" || b === "l-you") S.lab.you = t.value;
     if (b === "q-enemy" || b === "l-enemy") S.lab.enemy = t.value;
     if (b === "q-lane" || b === "l-lane") S.lab.lane = t.value;
   });
   document.addEventListener("submit", function (ev) {
+    if (ev.target.id === "sub-form") { ev.preventDefault(); sendForm(); return; }
     var f = ev.target.getAttribute("data-form"); if (!f) return;
     ev.preventDefault();
     var p = f === "quick" ? "q-" : "l-";
@@ -828,7 +1275,7 @@
 
 
   function selectTab(id, focus) {
-    S.dtab = id;
+    if (id.indexOf("me-") === 0) S.metab = id; else S.dtab = id;
     document.querySelectorAll(".dtab").forEach(function (b) {
       var on = b.getAttribute("data-target") === id;
       b.setAttribute("aria-selected", String(on)); b.setAttribute("tabindex", on ? "0" : "-1");

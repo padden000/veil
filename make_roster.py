@@ -27,6 +27,8 @@ for r in ms.iter_rows(min_row=4, values_only=True):
         return h['id']
     d = r[2].strftime('%Y-%m-%d') if isinstance(r[2], (datetime.date, datetime.datetime)) else str(r[2])
     matches.append({"season": r[1], "date": d, "rank": r[3], "party": r[5], "win": str(r[6]).lower().startswith('w'),
+                    "stars": r[4] if isinstance(r[4], (int, float)) else None,
+                    "dur": (r[7].hour * 60 + r[7].minute) if isinstance(r[7], datetime.time) else None,  # sheet stores m:ss as h:mm → seconds
                     "ally": {LMAP[k]: pid(v) for k, v in zip(LANES, r[8:13])}, "enemy": {LMAP[k]: pid(v) for k, v in zip(LANES, r[13:18])}})
 print(len(heroes), "heroes;", len(matches), "matches; unknown names:", sorted(unknown))
 print("ranks:", sorted(set(m['rank'] for m in matches)), "| dates:", matches[0]['date'], "→", matches[-1]['date'])
