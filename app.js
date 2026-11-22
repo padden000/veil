@@ -124,6 +124,7 @@
 
   function recOf(y, e, lane) { var s = (window.VEIL_STATS || {})[y]; return s && s.vs[e + "|" + lane] ? s.vs[e + "|" + lane] : null; }
   function topPairs(n) {
+    if (window.VEIL_TOP_PAIRS) return window.VEIL_TOP_PAIRS.filter(function (p) { return CH[p.y] && CH[p.e]; }).slice(0, n);
     var out = [], seen = {}, ST = window.VEIL_STATS || {};
     Object.keys(ST).forEach(function (id) { Object.keys(ST[id].vs).forEach(function (k) { var p = k.split("|"), key = [id, p[0]].sort().join("|") + "|" + p[1]; if (seen[key]) return; seen[key] = 1; out.push({ y: id, e: p[0], lane: p[1], r: ST[id].vs[k] }); }); });
     return out.sort(function (a, b) { return b.r.games - a.r.games || (b.r.wins / b.r.games) - (a.r.wins / a.r.games); }).slice(0, n);
@@ -356,9 +357,10 @@
   /* the user's own games with this hero: the hero they marked as themselves in that match (MATCH LOG),
      or, for matches with no mark, the ally in their usual lane (see MY PAGE) */
   function myHeroRec(id) {
+    if (dbOn() && AUTH.user && !S.myMatches) loadMyMatches();
     var out = { setup: meSetUp(), all: { games: 0, wins: 0 }, month: {} };
-    (window.VEIL_MATCHES || []).forEach(function (m, i) {
-      var ml = meMyLane(m, i); if (!ml || m.ally[ml.lane] !== id) return;
+    meList().forEach(function (m) {
+      var ml = meMyLane(m); if (!ml || m.ally[ml.lane] !== id) return;
       var mo = m.date.slice(0, 7); out.all.games++; if (m.win) out.all.wins++;
       out.month[mo] = out.month[mo] || { games: 0, wins: 0 }; out.month[mo].games++; if (m.win) out.month[mo].wins++;
     });
@@ -370,7 +372,8 @@
     if (!ST || !ST.all.games) return '<p class="muted" style="font-size:14px">まだ記録した試合に登場していません。</p>';
     var months = Object.keys(ST.month).sort(), md = function (m) { return Number(m.slice(5, 7)) + "月"; };
     var MY = myHeroRec(c.id), mine = MY.all.games > 0;
-    var myNote = !MY.setup ? '<p class="me-note">あなたの成績も重ねて表示できます。<a href="#me">マイページ</a>の「記録」タブで試合ごとに自分のヒーローを選ぶか、「英雄」タブで「いつものレーン」を選んでください。</p>'
+    var myNote = dbOn() && !AUTH.user ? '<p class="me-note">ログインすると、あなたの成績もこのグラフに重ねて表示できます。<button class="chip" type="button" data-action="login" style="min-height:30px">Discordでログイン</button></p>'
+      : !MY.setup ? '<p class="me-note">あなたの成績も重ねて表示できます。<a href="#me">マイページ</a>の「記録」タブで試合ごとに自分のヒーローを選ぶか、「英雄」タブで「いつものレーン」を選んでください。</p>'
       : !mine ? '<p class="me-note">あなたが ' + esc(c.name) + ' を使った記録はまだありません。<a href="#me">マイページで設定を見る</a></p>'
       : '<p class="me-note"><i class="me-key" style="background:' + MY_COLOR + '"></i>あなた: ' + MY.all.games + "試合 " + MY.all.wins + "勝 · 勝率 " + pct(MY.all.wins / MY.all.games * 100) + " — 全体 " + pct(ST.all.wins / ST.all.games * 100) + (MY.all.games >= ME_MIN ? "より " + mePt(MY.all.wins / MY.all.games * 100 - ST.all.wins / ST.all.games * 100) : '<span class="tag dim me-thin">データ不足</span>') + "</p>";
     var chart;
@@ -615,21 +618,14 @@
   var LANE_ORDER = ["EXP", "JUNGLE", "MID", "GOLD", "ROAM"];
   var RL_RECENT = 1000, RL_MIN_SHARE = 0.15, RL_MIN_GAMES = 2, RL_LANES = null;
   function rlBuild() {
-    var ms = (window.VEIL_MATCHES || []).map(function (m, i) { return { m: m, i: i }; })
-      .sort(function (a, b) { return a.m.date < b.m.date ? 1 : a.m.date > b.m.date ? -1 : b.i - a.i; })
-      .slice(0, RL_RECENT), cnt = {};
-    ms.forEach(function (x) {
-      [x.m.ally, x.m.enemy].forEach(function (team) {
-        Object.keys(team || {}).forEach(function (L) { var id = team[L]; if (!id) return; cnt[id] = cnt[id] || {}; cnt[id][L] = (cnt[id][L] || 0) + 1; });
-      });
-    });
+    var RLx = window.VEIL_RECENT_LANES || { lanes: {}, n: 0 }, cnt = RLx.lanes || {};
     RL_LANES = {};
     Object.keys(cnt).forEach(function (id) {
       var c = cnt[id], tot = 0, max = 0;
       Object.keys(c).forEach(function (L) { tot += c[L]; if (c[L] > max) max = c[L]; });
       RL_LANES[id] = LANE_ORDER.filter(function (L) { return c[L] && (c[L] === max || (c[L] >= RL_MIN_GAMES && c[L] / tot >= RL_MIN_SHARE)); });
     });
-    RL_LANES._n = ms.length;
+    RL_LANES._n = RLx.n || 0;
   }
   function rlLanes(c) { if (!RL_LANES) rlBuild(); return RL_LANES[c.id] || []; }
   var RL_KEY = "veil-roulette-exclude";
@@ -730,10 +726,17 @@
   function meLane() { var v = S.meLane; try { v = localStorage.getItem(ME_LANE_KEY) || v; } catch (e) {} return v && LANE_ORDER.indexOf(v) >= 0 ? v : "NONE"; }
   var ME_PICK_KEY = "veil-my-picks", ME_PJ = { Solo: "ソロ", Duo: "デュオ", Trio: "トリオ", "5-stack": "5人" };
   /* picks: { matchIndex: lane } — which ally the user was, per match. Sample: kept in this browser until login exists. */
+  /* the matches My Page counts: from the DB when it is connected (your own approved matches), otherwise the sheet.
+     Each match carries a key k: the sheet row index, or "d<id>" for a DB match. */
+  function meList() {
+    if (dbOn()) return S.myMatches || [];
+    return (window.VEIL_MATCHES || []).map(function (m, i) { m.k = i; return m; });
+  }
+  function mePickOf(m) { if (dbOn()) return m.me && m.ally[m.me] ? m.me : null; var p = mePicks()[m.k]; return p && m.ally[p] ? p : null; }
   function mePicks() { if (!S.mePicks) { try { S.mePicks = JSON.parse(localStorage.getItem(ME_PICK_KEY) || "{}") || {}; } catch (e) { S.mePicks = {}; } } return S.mePicks; }
   function meSavePicks(o) { S.mePicks = o; try { localStorage.setItem(ME_PICK_KEY, JSON.stringify(o)); } catch (e) {} }
-  function mePickCount() { var M = window.VEIL_MATCHES || [], P = mePicks(); return M.filter(function (m, i) { return P[i] && m.ally[P[i]]; }).length; }
-  function meMyLane(m, i) { var p = mePicks()[i]; if (p && m.ally[p]) return { lane: p, src: "pick" }; var l = meLane(); return l !== "NONE" && m.ally[l] ? { lane: l, src: "lane" } : null; }
+  function mePickCount() { return meList().filter(mePickOf).length; }
+  function meMyLane(m) { var p = mePickOf(m); if (p) return { lane: p, src: "pick" }; var l = meLane(); return l !== "NONE" && m.ally[l] ? { lane: l, src: "lane" } : null; }
   function meSetUp() { return mePickCount() > 0 || meLane() !== "NONE"; }
   function meSetLane(v) { S.meLane = v; try { if (v === "NONE") localStorage.removeItem(ME_LANE_KEY); else localStorage.setItem(ME_LANE_KEY, v); } catch (e) {} }
   function meRec(list) { var w = list.filter(function (m) { return m.win; }).length; return { games: list.length, wins: w, wr: list.length ? w / list.length * 100 : null }; }
@@ -775,12 +778,12 @@
     });
   }
   function meHeroes() {
-    var lane = meLane(), M = window.VEIL_MATCHES || [], all = meRec(M), picked = mePickCount();
+    var lane = meLane(), M = meList(), all = meRec(M), picked = mePickCount();
     var pick = '<div class="fgroup" role="group" aria-label="いつものレーン"><span class="mono gold" style="font-size:10px">いつものレーン</span>' + chips("me-lane", [["NONE", "使わない"]].concat(LANE_ORDER.map(function (L) { return [L, L]; })), lane) + "</div>" +
       '<p class="muted" style="font-size:12px;margin-top:-8px">「記録」タブで自分のヒーローを選んでいない試合だけ、いつものレーンの味方を自分として数えます。</p>';
     if (!meSetUp()) return pick + '<div class="empty" style="padding:44px 24px"><span class="tag dim">まだ数えられません</span><h3>自分が使ったヒーローを教えてください</h3><p class="muted" style="font-size:14px;max-width:580px">シートには自分がどのヒーローを使ったかの列がありません。「記録」タブで試合ごとに自分のヒーローを選ぶか、上でいつものレーンを選んでください。</p><button class="btn ghost" type="button" data-action="tab" data-target="me-log">記録タブを開く' + IC.arrow + "</button></div>";
     var by = {}, lanesOf = {}, counted = 0;
-    M.forEach(function (m, i) { var ml = meMyLane(m, i); if (!ml) return; var id = m.ally[ml.lane]; if (!id || !CH[id]) return; counted++; (by[id] = by[id] || []).push(m); lanesOf[id] = lanesOf[id] || {}; lanesOf[id][ml.lane] = (lanesOf[id][ml.lane] || 0) + 1; });
+    M.forEach(function (m) { var ml = meMyLane(m); if (!ml) return; var id = m.ally[ml.lane]; if (!id || !CH[id]) return; counted++; (by[id] = by[id] || []).push(m); lanesOf[id] = lanesOf[id] || {}; lanesOf[id][ml.lane] = (lanesOf[id][ml.lane] || 0) + 1; });
     var topLane = function (id) { var o = lanesOf[id]; return Object.keys(o).sort(function (a, b) { return o[b] - o[a]; })[0]; };
     var list = Object.keys(by).map(function (id) { return { c: CH[id], r: meRec(by[id]), lane: topLane(id) }; }).sort(function (a, b) { return b.r.games - a.r.games || b.r.wr - a.r.wr; });
     var best = list.filter(function (x) { return x.r.games >= ME_MIN; }).sort(function (a, b) { return b.r.wr - a.r.wr || b.r.games - a.r.games; }).slice(0, 3);
@@ -795,33 +798,41 @@
     return pick + '<p class="muted" style="font-size:13px">' + src + "を、あなたが使ったヒーローとして数えています(" + counted + "試合 · " + list.length + "体)。「いつもとの差」は、あなたの全体の勝率(" + pct(all.wr) + ")との差です。</p>" +
       cards + '<h3 class="subh">使ったヒーロー</h3>' + meTable(["ヒーロー", "レーン", "試合数", "あなたの勝率", "いつもとの差"], rows);
   }
-  function meLogRow(m, i) {
-    var p = mePicks()[i]; if (p && !m.ally[p]) p = null;
+  function meLogRow(m) {
+    var p = mePickOf(m), i = m.k, no = dbOn() ? m.id : m.k + 1;
     var team = function (side) {
       var own = side === "ally";
       return '<div class="mlog-team ' + side + '"' + (own ? ' role="group" aria-label="味方 · 自分のヒーローを選ぶ"' : ' aria-label="敵"') + ">" + LANE_ORDER.map(function (L) {
         var c = CH[m[side][L]]; if (!c) return '<span class="mlog-h none"><span class="portrait sm"></span><span class="mono">' + L + "</span></span>";
         var on = own && p === L, inner = portrait(c, true) + '<span class="mono">' + L + "</span>";
-        return own ? '<button type="button" class="mlog-h' + (on ? " on" : "") + '" data-action="me-pick" data-i="' + i + '" data-lane="' + L + '" aria-pressed="' + on + '" title="' + esc(c.name) + " (" + L + ")" + (on ? " · 選択を外す" : " · 自分にする") + '">' + inner + (on ? "<b>YOU</b>" : "") + "</button>"
+        return own ? '<button type="button" class="mlog-h' + (on ? " on" : "") + '" data-action="me-pick" data-k="' + i + '" data-lane="' + L + '" aria-pressed="' + on + '" title="' + esc(c.name) + " (" + L + ")" + (on ? " · 選択を外す" : " · 自分にする") + '">' + inner + (on ? "<b>YOU</b>" : "") + "</button>"
           : '<span class="mlog-h" title="' + esc(c.name) + " (" + L + ')">' + inner + "</span>";
       }).join("") + "</div>";
     };
-    return '<li class="mlog-row' + (p ? " picked" : "") + '" id="mlog-' + i + '"><div class="mlog-info"><span class="mono muted" style="font-size:10px">No.' + (i + 1) + '</span><span class="num">' + m.date.replace(/-/g, ".") + '</span><span><span class="mlog-res ' + (m.win ? "w" : "l") + '">' + (m.win ? "WIN" : "LOSE") + '</span> <span class="muted" style="font-size:12px">' + (ME_PJ[m.party] || esc(m.party)) + " · " + meDur(m.dur) + "</span></span></div>" +
+    return '<li class="mlog-row' + (p ? " picked" : "") + '" id="mlog-' + i + '"><div class="mlog-info"><span class="mono muted" style="font-size:10px">No.' + no + '</span><span class="num">' + m.date.replace(/-/g, ".") + '</span><span><span class="mlog-res ' + (m.win ? "w" : "l") + '">' + (m.win ? "WIN" : "LOSE") + '</span> <span class="muted" style="font-size:12px">' + (ME_PJ[m.party] || esc(m.party)) + " · " + meDur(m.dur) + "</span></span></div>" +
       team("ally") + '<span class="mono muted mlog-vs">VS</span>' + team("enemy") + "</li>";
   }
   function meLogList() {
-    var M = window.VEIL_MATCHES || [], P = mePicks(), only = S.meLogOnly === "todo";
-    var idx = M.map(function (m, i) { return i; }).reverse().filter(function (i) { return !only || !(P[i] && M[i].ally[P[i]]); });
-    if (!idx.length) return '<div class="empty" style="padding:44px 24px"><span class="tag">COMPLETE</span><h3>すべての試合で自分を選びました</h3></div>';
-    return '<ol class="mlog">' + idx.map(function (i) { return meLogRow(M[i], i); }).join("") + "</ol>";
+    var only = S.meLogOnly === "todo", list = meList().slice().reverse().filter(function (m) { return !only || !mePickOf(m); });
+    if (!list.length) return '<div class="empty" style="padding:44px 24px"><span class="tag">COMPLETE</span><h3>すべての試合で自分を選びました</h3></div>';
+    return '<ol class="mlog">' + list.map(meLogRow).join("") + "</ol>";
   }
   function meLogHead() {
-    var n = (window.VEIL_MATCHES || []).length, k = mePickCount();
+    var n = meList().length, k = mePickCount(), mv = meMovable();
     return '<div class="mlog-head"><div style="display:flex;flex-direction:column;gap:8px"><span class="mono gold" style="font-size:10px">自分を選んだ試合</span><span><span class="serif num" style="font-size:34px">' + k + '</span><span class="muted"> / ' + n + ' 試合</span></span><span class="mlog-prog"><i style="width:' + (n ? k / n * 100 : 0).toFixed(1) + '%"></i></span></div>' +
-      '<div class="fgroup" role="group" aria-label="表示する試合">' + chips("me-log", [["all", "すべて"], ["todo", "未選択だけ"]], S.meLogOnly || "all") + (k ? '<button class="chip" type="button" data-action="me-unpick-all">選択をすべて外す</button>' : "") + "</div></div>";
+      '<div class="fgroup" role="group" aria-label="表示する試合">' + chips("me-log", [["all", "すべて"], ["todo", "未選択だけ"]], S.meLogOnly || "all") + (k && !dbOn() ? '<button class="chip" type="button" data-action="me-unpick-all">選択をすべて外す</button>' : "") + "</div></div>" +
+      (mv.length ? '<div class="sample-note" style="margin-top:16px"><span class="badge">移行</span><span>このブラウザで前に選んだ ' + mv.length + ' 試合ぶんの「自分」を、アカウントに移せます。</span> <button class="chip on-gold" type="button" data-action="me-move-picks">アカウントに移す</button></div>' : "");
+  }
+  function meSig(m) { return m.date + ":" + LANE_ORDER.map(function (L) { return m.ally[L]; }).concat(LANE_ORDER.map(function (L) { return m.enemy[L]; })).sort().join(","); }
+  function meMovable() {
+    if (!dbOn() || !S.myMatches) return [];
+    var P = mePicks(), SM = window.VEIL_MATCHES || [], bySig = {};
+    S.myMatches.forEach(function (m) { bySig[meSig(m)] = m; });
+    return Object.keys(P).map(function (i) { var sm = SM[i], lane = P[i]; if (!sm || !sm.ally[lane]) return null; var dm = bySig[meSig(sm)];
+      return dm && !dm.me && dm.ally[lane] === sm.ally[lane] ? { m: dm, lane: lane } : null; }).filter(Boolean);
   }
   function meLog() {
-    return '<p class="sample-note"><span class="badge">見本</span>味方5体のうち、自分が使ったヒーローをクリックしてください。もう一度押すと外れます。選んだ内容は今はこのブラウザだけに保存され、ログインができたらDBに保存します。</p>' +
+    return '<p class="sample-note"><span class="badge">' + (dbOn() ? "記録" : "見本") + '</span>味方5体のうち、自分が使ったヒーローをクリックしてください。もう一度押すと外れます。' + (dbOn() ? "選んだ内容はアカウントに保存されます。" : "選んだ内容はこのブラウザだけに保存されます。") + "</p>" +
       '<div id="mlog-head">' + meLogHead() + '</div><div id="mlog-list">' + meLogList() + "</div>";
   }
   function meSides(M, all) {
@@ -842,8 +853,13 @@
   }
   var ME_TABS = [["me-overview", "戦績", "RECORD"], ["me-heroes-tab", "英雄", "HEROES"], ["me-cond", "戦況", "FIELD"], ["me-sides", "盟友と宿敵", "BONDS"], ["me-log", "記録", "LOG"]];
   function viewMe() {
-    var M = window.VEIL_MATCHES || [];
-    if (!M.length) return '<section class="section"><div class="wrap"><div class="empty"><h3>まだ試合が記録されていません</h3></div></div></section>';
+    if (dbOn() && (!AUTH.ready || !AUTH.user || !S.myMatches)) {
+      if (AUTH.user && !S.myMatches) loadMyMatches();
+      var gate = acctGate() || '<div class="empty"><span class="tag dim">LOADING</span><h3>あなたの試合を読み込んでいます…</h3></div>';
+      return acctHead("MY RECORD", "あなたの戦いの記録。", "MY PAGE") + '<section class="section tight"><div class="wrap">' + gate + "</div></section>";
+    }
+    var M = meList();
+    if (!M.length) return acctHead("MY RECORD", "あなたの戦いの記録。", "MY PAGE") + '<section class="section tight"><div class="wrap"><div class="empty"><span class="tag dim">NO DATA</span><h3>まだ承認された試合がありません</h3>' + (dbOn() ? '<p class="muted" style="font-size:14px">試合を登録して承認されると、ここに勝率や得意ヒーローが出ます。</p><a class="btn primary" href="#submit">試合を登録する' + IC.arrow + "</a>" : "") + "</div></div></section>";
     var all = meRec(M), st = meStreaks(M), last10 = meRec(M.slice(-10));
     var durW = M.filter(function (m) { return m.win && m.dur; }), durL = M.filter(function (m) { return !m.win && m.dur; });
     var avgD = function (l) { return l.length ? l.reduce(function (a, m) { return a + m.dur; }, 0) / l.length : null; };
@@ -851,7 +867,7 @@
     var partyRows = meGroupRows(parties.map(function (p) { return { label: PJ[p], r: meRec(M.filter(function (m) { return m.party === p; })) }; }), all);
     var buckets = [["12分未満", 0, 720], ["12〜15分", 720, 900], ["15〜18分", 900, 1080], ["18分以上", 1080, 1e9]];
     var durRows = meGroupRows(buckets.map(function (b) { return { label: b[0], r: meRec(M.filter(function (m) { return m.dur != null && m.dur >= b[1] && m.dur < b[2]; })) }; }), all);
-    var MI = window.VEIL_MATCH_INFO || {};
+    var MI = { from: M[0].date, to: M[M.length - 1].date };
     var cur = ME_TABS.some(function (t) { return t[0] === S.metab; }) ? S.metab : ME_TABS[0][0];
     var MP = function (id) { return 'role="tabpanel" id="' + id + '" aria-labelledby="tab-' + id + '"' + (id === cur ? "" : " hidden"); };
     return '<section class="phead">' + atmo({ h: 260, seed: 53 }) + '<div class="wrap">' + crumbs([["HOME", "#home"], ["MY PAGE"]]) +
@@ -860,7 +876,7 @@
       '<section class="section tight" style="padding-top:0"><nav class="dtabs" aria-label="マイページの項目"><div class="wrap" role="tablist" aria-label="マイページ">' +
       ME_TABS.map(function (t) { var on = cur === t[0]; return '<button type="button" class="dtab dtab2" role="tab" id="tab-' + t[0] + '" aria-controls="' + t[0] + '" aria-selected="' + on + '" tabindex="' + (on ? 0 : -1) + '" data-action="tab" data-target="' + t[0] + '"><span class="mono">' + t[2] + "</span>" + t[1] + "</button>"; }).join("") + "</div></nav>" +
       '<div class="wrap" style="display:flex;flex-direction:column;gap:40px;padding-top:36px">' +
-      '<p class="sample-note"><span class="badge">VEIL集計</span>シートに記録した ' + all.games + " 試合(" + (MI.from || "").replace(/-/g, ".") + " 〜 " + (MI.to || "").replace(/-/g, ".") + ")を、あなたの試合として集計しています。ログインと試合登録ができたら、登録した試合もここに加わります。</p>" +
+      '<p class="sample-note"><span class="badge">VEIL集計</span>' + (dbOn() ? "あなたが登録して承認された " + all.games + " 試合" : "シートに記録した " + all.games + " 試合") + "(" + (MI.from || "").replace(/-/g, ".") + " 〜 " + (MI.to || "").replace(/-/g, ".") + ")を集計しています。" + (dbOn() ? "承認待ちの試合は入っていません。" : "ログインと試合登録ができたら、登録した試合もここに加わります。") + "</p>" +
       '<div ' + MP("me-overview") + ' style="display:flex;flex-direction:column;gap:72px"><div>' + secHead("01", "OVERVIEW", "全体の成績") + '<div class="me-tiles">' +
         meTile("WIN RATE · 勝率", pct(all.wr), all.wins + "勝 " + (all.games - all.wins) + "敗") +
         meTile("VS AVERAGE · 平均との差", mePt(all.wr - 50), "平均は50%(全員の勝ちと負けは同じ数)") +
@@ -893,13 +909,99 @@
       SB = window.supabase.createClient(CFG.supabaseUrl, CFG.supabaseKey, { auth: { flowType: "pkce", detectSessionInUrl: true, persistSession: true, autoRefreshToken: true } });
   } catch (e) { SB = null; }
   function dbOn() { return !!SB; }
+
+  /* ---- statistics from the DB: small pre-counted views, cached in this browser until the DB refreshes them ---- */
+  var DB_CACHE_KEY = "veil-db-v1", DBC = { at: null, g: null, h: {}, loading: {} };
+  function dbCacheSave() {
+    try { localStorage.setItem(DB_CACHE_KEY, JSON.stringify({ at: DBC.at, g: DBC.g, h: DBC.h })); }
+    catch (e) { try { localStorage.setItem(DB_CACHE_KEY, JSON.stringify({ at: DBC.at, g: DBC.g, h: {} })); } catch (e2) {} }
+  }
+  function dbCacheLoad() {
+    try {
+      var c = JSON.parse(localStorage.getItem(DB_CACHE_KEY) || "null");
+      if (!c || !c.g) return false;
+      DBC = { at: c.at, g: c.g, h: c.h || {}, loading: {} };
+      window.VEIL_APPLY(c.g);
+      Object.keys(DBC.h).forEach(function (id) { window.VEIL_APPLY_HERO(id, DBC.h[id].vs, DBC.h[id].mates); });
+      RL_LANES = null; return true;
+    } catch (e) { return false; }
+  }
+  /* PostgREST hands out at most 1000 rows per request, so read in pages */
+  function fetchAll(table, cols, order, eq) {
+    var out = [], size = 1000;
+    function page(from) {
+      var q = SB.from(table).select(cols); order.forEach(function (c) { q = q.order(c); });
+      if (eq) Object.keys(eq).forEach(function (k) { q = q.eq(k, eq[k]); });
+      return q.range(from, from + size - 1).then(function (r) {
+        if (r.error) throw r.error;
+        out = out.concat(r.data || []);
+        return (r.data || []).length === size ? page(from + size) : out;
+      });
+    }
+    return page(0);
+  }
+  var NO_SOFT = { submit: 1, review: 1, account: 1 };
+  function softRender() { var h = (location.hash || "").replace(/^#/, "") || "home"; if (!NO_SOFT[h]) render(true); }
+  function dbStats() {
+    if (!SB) return;
+    SB.from("stats_summary").select("matches,first_on,last_on,ranks,recent_n,refreshed_at").limit(1).then(function (r) {
+      if (r.error || !r.data || !r.data[0]) return;
+      var sm = r.data[0];
+      if (DBC.g && DBC.at === sm.refreshed_at) return;          /* nothing new since the cached copy */
+      return Promise.all([
+        fetchAll("stats_hero", "hero,lane,rank,month,games,wins", ["hero", "lane", "rank", "month"]),
+        fetchAll("stats_recent_lanes", "hero,lane,games", ["hero", "lane"]),
+        fetchAll("stats_top_pairs", "hero,lane,opp,games,wins", ["games"])
+      ]).then(function (x) {
+        DBC = { at: sm.refreshed_at, g: { summary: sm, hero: x[0], recent: x[1], pairs: x[2].sort(function (a, b) { return b.games - a.games || b.wins / b.games - a.wins / a.games; }) }, h: {}, loading: {} };
+        window.VEIL_APPLY(DBC.g); RL_LANES = null; dbCacheSave(); softRender(); routeHeroes().forEach(ensureHero);
+      });
+    }).catch(function () {});
+  }
+  /* matchups and teammates of one hero, loaded when a page needs them */
+  function ensureHero(id) {
+    if (!SB || !DBC.g || !id || !CH[id] || DBC.h[id] || DBC.loading[id]) return;
+    DBC.loading[id] = 1;
+    Promise.all([
+      fetchAll("stats_vs", "lane,opp,games,wins", ["lane", "opp"], { hero: id }),
+      fetchAll("stats_mates", "lane,mate,games,wins", ["lane", "mate"], { hero: id })
+    ]).then(function (x) {
+      DBC.h[id] = { vs: x[0], mates: x[1] }; delete DBC.loading[id];
+      window.VEIL_APPLY_HERO(id, x[0], x[1]); dbCacheSave();
+      if (routeHeroes().indexOf(id) >= 0) softRender();
+    }).catch(function () { delete DBC.loading[id]; });
+  }
+  function routeHeroes() {
+    var h = (location.hash || "").replace(/^#/, ""), m;
+    if ((m = h.match(/^champion-([a-z]+)$/))) return [m[1]];
+    if ((m = h.match(/^matchup-([a-z]+)-([a-z]+)-([a-z]+)$/))) return [m[1], m[2]];
+    if (h === "matchup") return [S.lab && S.lab.you].filter(Boolean);
+    return [];
+  }
+  /* the logged-in user's own matches, for My Page (approved only) */
+  function loadMyMatches() {
+    if (!SB || !AUTH.user || S.myLoading) return;
+    S.myLoading = true;
+    SB.rpc("my_matches", { lim: 1000 }).then(function (res) {
+      S.myLoading = false;
+      if (res.error) { S.myMatches = []; return; }
+      S.myMatches = (res.data || []).filter(function (r) { return r.status === "approved"; }).map(function (r) {
+        var m = { id: r.id, k: "d" + r.id, date: String(r.played_on), rank: r.rank, party: r.party, win: r.win, dur: r.duration_sec, ally: {}, enemy: {}, me: r.my_lane || null };
+        Object.keys(r.picks || {}).forEach(function (k) { var a = k.split(":"); if (m[a[0]]) m[a[0]][a[1]] = r.picks[k]; });
+        return m;
+      }).sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : a.id - b.id; });
+      var h = (location.hash || "").replace(/^#/, "");
+      if (h === "me" || /^champion-/.test(h)) softRender();
+    });
+  }
   function canReview() { return AUTH.role === "manager" || AUTH.role === "admin"; }
   function canManage() { return AUTH.role === "manager" || AUTH.role === "admin"; }
   function userName(u) { var m = (u && u.user_metadata) || {}; return m.full_name || m.name || (m.custom_claims && m.custom_claims.global_name) || m.user_name || "プレイヤー"; }
   function dbErr(e) { var m = (e && (e.message || e.error_description)) || String(e || ""); return /Failed to fetch|NetworkError/i.test(m) ? "サーバーにつながりませんでした。通信を確かめて、もう一度試してください。" : m; }
   function setUser(session) {
     var u = session && session.user;
-    if (!u) { AUTH.user = null; AUTH.role = null; AUTH.name = ""; return Promise.resolve(); }
+    if (!u) { AUTH.user = null; AUTH.role = null; AUTH.name = ""; S.myMatches = null; return Promise.resolve(); }
+    if (!AUTH.user || AUTH.user.id !== u.id) S.myMatches = null;
     AUTH.user = u; AUTH.name = userName(u);
     return SB.rpc("my_role").then(function (r) { AUTH.role = r.error ? null : r.data; });
   }
@@ -907,6 +1009,7 @@
     /* PKCE: Discord sends the user back with ?code=…; supabase-js trades it for a session, then the address is cleaned */
     SB.auth.getSession().then(function (r) { return setUser(r.data && r.data.session); }).then(function () {
       AUTH.ready = true;
+      if (AUTH.user && /^#(me|champion-)/.test(location.hash)) loadMyMatches();
       if (/[?&]code=/.test(location.search) || /[?&]error=/.test(location.search)) {
         var back = ""; try { back = sessionStorage.getItem("veil-return") || ""; sessionStorage.removeItem("veil-return"); } catch (e) {}
         history.replaceState(null, "", location.pathname + (back || location.hash || "#home"));
@@ -1038,6 +1141,7 @@
       if (res.error) { msg.className = "sub-msg bad"; msg.textContent = dbErr(res.error); return; }
       var d = res.data || {};
       S.subLast = { date: r.payload.played_on, rank: r.payload.rank, party: r.payload.party, season: r.payload.season };
+      S.myMatches = null;   /* My Page reloads your matches next time */
       msg.className = "sub-msg ok";
       msg.textContent = d.status === "approved" ? "登録しました(No." + d.id + ")。集計には15分ほどで反映されます。" : "登録しました(No." + d.id + ")。承認されると集計に入ります。" + (d.dup_of ? "同じ試合(No." + d.dup_of + ")がすでにあるので、運営が確認します。" : "");
       var f = document.getElementById("sub-form");
@@ -1164,6 +1268,7 @@
     var r = route();
     app.innerHTML = header(r.nav) + '<main id="view" tabindex="-1">' + r.html + "</main>" + footer();
     if (r.after && dbOn() && AUTH.user) setTimeout(r.after, 0);
+    if (dbOn()) routeHeroes().forEach(ensureHero);
     if (r.focus) { var el = document.getElementById(r.focus); if (el) setTimeout(function () { el.scrollIntoView({ block: "center" }); }, 60); }
     else if (!keepScroll) window.scrollTo(0, 0);
     var titles = { roulette: "ROULETTE — VEIL", home: "VEIL", champions: "CHAMPIONS — VEIL", equipment: "EQUIPMENT — VEIL", matchup: "MATCHUP LAB — VEIL", lore: "LORE ARCHIVE — VEIL", patch: "PATCH & META — VEIL" };
@@ -1189,12 +1294,27 @@
     if (act === "rv-ng-go") { reviewOne(t.getAttribute("data-id"), false, t); return; }
     if (act === "rv-ng-cancel") { var rr = document.getElementById("rv-" + t.getAttribute("data-id")); if (rr) rr.querySelector(".rv-btns").innerHTML = '<button class="chip on-gold" type="button" data-action="rv-ok" data-id="' + t.getAttribute("data-id") + '">承認</button><button class="chip" type="button" data-action="rv-ng" data-id="' + t.getAttribute("data-id") + '">却下</button>'; return; }
     if (act === "me-pick") {
-      var pi = t.getAttribute("data-i"), pl = t.getAttribute("data-lane"), PK = mePicks();
-      if (PK[pi] === pl) delete PK[pi]; else PK[pi] = pl; meSavePicks(PK);
-      var row = document.getElementById("mlog-" + pi), Mx = window.VEIL_MATCHES || [];
-      if (row) { if (S.meLogOnly === "todo" && PK[pi]) row.classList.add("picked", "leaving"); var tmp = document.createElement("div"); tmp.innerHTML = meLogRow(Mx[pi], Number(pi)); var nr = tmp.firstChild; row.replaceWith(nr); var nb = nr.querySelector('[data-lane="' + pl + '"]'); if (nb) nb.focus(); }
-      document.getElementById("mlog-head").innerHTML = meLogHead();
-      var mh2 = document.getElementById("me-heroes"); if (mh2) mh2.innerHTML = meHeroes(); return; }
+      var pk = t.getAttribute("data-k"), pl = t.getAttribute("data-lane"), pm = meList().filter(function (x) { return String(x.k) === pk; })[0];
+      if (!pm) return;
+      var redraw = function () {
+        var row = document.getElementById("mlog-" + pk);
+        if (row) { var tmp = document.createElement("div"); tmp.innerHTML = meLogRow(pm); var nr = tmp.firstChild; row.replaceWith(nr); var nb = nr.querySelector('[data-lane="' + pl + '"]'); if (nb) nb.focus(); }
+        document.getElementById("mlog-head").innerHTML = meLogHead();
+        var mh2 = document.getElementById("me-heroes"); if (mh2) mh2.innerHTML = meHeroes();
+      };
+      if (dbOn()) {
+        var nl = pm.me === pl ? null : pl; t.disabled = true;
+        SB.rpc("set_my_lane", { match_id: pm.id, lane: nl }).then(function (res) { t.disabled = false; if (res.error) { t.title = dbErr(res.error); return; } pm.me = nl; redraw(); });
+        return;
+      }
+      var PK = mePicks(); if (PK[pk] === pl) delete PK[pk]; else PK[pk] = pl; meSavePicks(PK); redraw(); return; }
+    if (act === "me-move-picks") {
+      var mv = meMovable(); t.disabled = true; t.textContent = "移しています… 0 / " + mv.length;
+      var step = function (n) {
+        if (n >= mv.length) { meSavePicks({}); render(true); return; }
+        SB.rpc("set_my_lane", { match_id: mv[n].m.id, lane: mv[n].lane }).then(function (res) { if (!res.error) mv[n].m.me = mv[n].lane; t.textContent = "移しています… " + (n + 1) + " / " + mv.length; step(n + 1); });
+      };
+      step(0); return; }
     if (act === "me-unpick-all") { meSavePicks({}); document.getElementById("mlog-head").innerHTML = meLogHead(); document.getElementById("mlog-list").innerHTML = meLogList(); var mh3 = document.getElementById("me-heroes"); if (mh3) mh3.innerHTML = meHeroes(); return; }
     if (act === "rl-spin") { if (!document.getElementById("rl-strip-wrap")) return; rlSpin(); return; }
     if (act === "rl-ex") { var ex = rlEx(), xid = t.getAttribute("data-id"); if (ex.indexOf(xid) < 0) ex.push(xid); rlSetEx(ex); S.rl.last = null; document.getElementById("rl-out").innerHTML = '<p class="muted rl-note">' + esc(CH[xid].name) + ' を候補から外しました。</p>'; document.getElementById("rl-ex").innerHTML = rlExList(); rlCount(); return; }
@@ -1333,9 +1453,11 @@
   });
 
   /* ---------------- boot ---------------- */
+  if (dbOn()) dbCacheLoad();              /* last DB statistics kept in this browser: shown at once, then checked for updates */
   var tp0 = topPairs(1)[0]; if (tp0) S.lab = { you: tp0.y, enemy: tp0.e, lane: tp0.lane };
   window.addEventListener("hashchange", function () { closeSearch(); S.artSel = {}; render(); });
   render();
+  if (dbOn()) { try { dbStats(); } catch (e) {} }
   var curtain = document.getElementById("curtain");
   function lift() { curtain.classList.add("done"); }
   setTimeout(lift, 700);
