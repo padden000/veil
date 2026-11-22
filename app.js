@@ -898,7 +898,7 @@
      Login is Discord through Supabase Auth: the site never sees or stores a password.
      All writes go through database functions (submit_match, review_match, set_role …) that check the user's role. */
   var CFG = window.VEIL_CONFIG || {}, SB = null;
-  var AUTH = { ready: false, user: null, role: null, name: "" };
+  var AUTH = { ready: false, user: null, role: null, name: "", avatar: "" };
   var RANKS = ["Warrior", "Elite", "Master", "Grandmaster", "Epic", "Legend", "Mythic", "Mythical Honor", "Mythical Glory", "Mythical Immortal"];
   var PARTIES = [["Solo", "ソロ"], ["Duo", "デュオ(2人)"], ["Trio", "トリオ(3人)"], ["5-stack", "5人パーティ"]];
   var ROLE_JP = { member: "一般", trusted: "信頼ユーザー", manager: "運営", admin: "管理者" };
@@ -992,6 +992,9 @@
       }).sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : a.id - b.id; });
       var h = (location.hash || "").replace(/^#/, "");
       if (h === "me" || /^champion-/.test(h)) softRender();
+      /* account page: add the most-played heroes to the icon choices without redrawing the page */
+      var ap = document.querySelector(".acct-av");
+      if (h === "account" && ap && S.myMatches.length) { var tmp = document.createElement("div"); tmp.innerHTML = avatarPicker(); ap.replaceWith(tmp.firstChild); }
     });
   }
   function canReview() { return AUTH.role === "manager" || AUTH.role === "admin"; }
@@ -1000,10 +1003,14 @@
   function dbErr(e) { var m = (e && (e.message || e.error_description)) || String(e || ""); return /Failed to fetch|NetworkError/i.test(m) ? "サーバーにつながりませんでした。通信を確かめて、もう一度試してください。" : m; }
   function setUser(session) {
     var u = session && session.user;
-    if (!u) { AUTH.user = null; AUTH.role = null; AUTH.name = ""; S.myMatches = null; return Promise.resolve(); }
-    if (!AUTH.user || AUTH.user.id !== u.id) S.myMatches = null;
+    if (!u) { AUTH.user = null; AUTH.role = null; AUTH.name = ""; AUTH.avatar = ""; S.myMatches = null; return Promise.resolve(); }
+    if (!AUTH.user || AUTH.user.id !== u.id) { S.myMatches = null; AUTH.avatar = ""; }
     AUTH.user = u; AUTH.name = userName(u);
-    return SB.rpc("my_role").then(function (r) { AUTH.role = r.error ? null : r.data; });
+    return Promise.all([
+      SB.rpc("my_role").then(function (r) { AUTH.role = r.error ? null : r.data; }),
+      /* the icon choice ('' = Discord icon); an older database without the column just keeps the Discord icon */
+      Promise.resolve().then(function () { return SB.from("profiles").select("avatar").eq("id", u.id).limit(1); }).then(function (r) { AUTH.avatar = (!r.error && r.data && r.data[0] && r.data[0].avatar) || ""; }, function () {})
+    ]);
   }
   if (SB) {
     /* PKCE: Discord sends the user back with ?code=…; supabase-js trades it for a session, then the address is cleaned */
@@ -1028,11 +1035,21 @@
   function logout() { if (SB) SB.auth.signOut().then(function () { go("#home"); }); }
 
   var IC_DISCORD = '<svg class="ic" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M19.6 5.6A16.7 16.7 0 0 0 15.5 4.3l-.5 1a15.4 15.4 0 0 0-6 0l-.5-1a16.6 16.6 0 0 0-4.1 1.3C1.8 9.5 1.1 13.3 1.4 17a16.8 16.8 0 0 0 5.1 2.6l1.1-1.7a10.8 10.8 0 0 1-1.7-.8l.4-.3a11.9 11.9 0 0 0 11.4 0l.4.3c-.5.3-1.1.6-1.7.8l1.1 1.7a16.7 16.7 0 0 0 5.1-2.6c.4-4.3-.7-8-3-11.4ZM8.5 14.7c-1 0-1.8-.9-1.8-2s.8-2 1.8-2 1.8.9 1.8 2-.8 2-1.8 2Zm7 0c-1 0-1.8-.9-1.8-2s.8-2 1.8-2 1.8.9 1.8 2-.8 2-1.8 2Z"/></svg>';
+  /* profile icon: the Discord icon (default), a hero's face, or the first letter of the name.
+     choice: '' / 'discord' / 'initial' / 'hero:<id>'. A Discord icon that fails to load falls back to the letter. */
+  function discordIcon(u) { var m = (u && u.user_metadata) || {}, v = m.avatar_url || m.picture || ""; return /^https:\/\/cdn\.discordapp\.com\/[\w./?=-]+$/.test(v) ? v : ""; }
+  function avatarHtml(choice, discord, name, size) {
+    var ini = esc(String(name || "?").trim().slice(0, 1).toUpperCase() || "?"), open = '<span class="avatar' + (size ? " " + size : "") + '" data-ini="' + ini + '" aria-hidden="true">';
+    if (choice && choice.indexOf("hero:") === 0) { var c = CH[choice.slice(5)]; if (c) return open + portrait(c, true) + "</span>"; }
+    if (choice !== "initial" && discord) return open + '<img src="' + esc(discord) + '" alt="" referrerpolicy="no-referrer" loading="lazy" onerror="this.remove()"></span>';
+    return open + "</span>";
+  }
+  function myAvatar(size) { return avatarHtml(AUTH.avatar, discordIcon(AUTH.user), AUTH.name, size); }
   function accountBtn(cur) {
     if (!SB) return "";
     if (!AUTH.ready) return '<span class="icon-btn acct-btn" aria-hidden="true"></span>';
     if (!AUTH.user) return '<button class="icon-btn acct-btn login" type="button" data-action="login" title="Discordでログイン">' + IC_DISCORD + '<span>LOGIN</span></button>';
-    return '<a class="icon-btn acct-btn' + (cur === "account" ? " on" : "") + '" href="#account" title="' + esc(AUTH.name) + ' のアカウント"><span class="acct-ini">' + esc(AUTH.name.slice(0, 1).toUpperCase()) + "</span></a>";
+    return '<a class="icon-btn acct-btn has-av' + (cur === "account" ? " on" : "") + '" href="#account" title="' + esc(AUTH.name) + ' のアカウント">' + myAvatar() + '<span class="sr">アカウント</span></a>';
   }
   function acctHead(title, jp, crumb) {
     return '<section class="phead">' + atmo({ h: 220, seed: 71 }) + '<div class="wrap">' + crumbs([["HOME", "#home"], [crumb]]) +
@@ -1047,11 +1064,44 @@
     return "";
   }
 
+  /* ----- icon picker (account page) ----- */
+  function avatarPicker() {
+    var cur = AUTH.avatar || "", dc = discordIcon(AUTH.user), opt = function (v, label, html) {
+      var on = v === cur || (!v && cur === "discord");
+      return '<button class="av-opt' + (on ? " on" : "") + '" type="button" data-action="av-set" data-v="' + esc(v) + '" aria-pressed="' + on + '">' + html + '<span>' + label + "</span></button>";
+    };
+    /* quick picks: the heroes the user played most (when their matches are loaded), plus the current hero choice */
+    var cnt = {};
+    (S.myMatches || []).forEach(function (m) { var ml = meMyLane(m); var id = ml && m.ally && m.ally[ml.lane]; if (id && CH[id]) cnt[id] = (cnt[id] || 0) + 1; });
+    var top = Object.keys(cnt).sort(function (a, b) { return cnt[b] - cnt[a]; }).slice(0, 6);
+    if (cur.indexOf("hero:") === 0 && CH[cur.slice(5)] && top.indexOf(cur.slice(5)) < 0) top.unshift(cur.slice(5));
+    return '<div class="acct-av"><div style="display:flex;flex-direction:column;gap:6px"><span class="mono gold" style="font-size:10px">ICON · アイコン</span><span class="muted" style="font-size:13px">ヘッダーやメンバー一覧に出るアイコンです。画像のアップロードはなく、Discordのアイコンかヒーローの顔から選びます。</span></div>' +
+      '<div class="av-opts">' + opt("", dc ? "Discordのアイコン" : "Discord(アイコン未設定)", avatarHtml("", dc, AUTH.name)) + opt("initial", "頭文字", avatarHtml("initial", "", AUTH.name)) +
+        top.map(function (id) { return opt("hero:" + id, esc(CH[id].name), avatarHtml("hero:" + id, "", AUTH.name)); }).join("") + "</div>" +
+      '<div class="av-hero">' + heroDatalist() + '<label class="sr" for="av-hero">顔にするヒーロー</label><input id="av-hero" class="sub-hero" list="hero-names" autocomplete="off" placeholder="ほかのヒーローの顔にする(名前を入力)"><button class="chip" type="button" data-action="av-hero">この顔にする</button></div>' +
+      '<span id="av-msg" class="sub-msg" role="status" aria-live="polite"></span></div>';
+  }
+  function saveAvatar(v) {
+    var msg = document.getElementById("av-msg");
+    if (msg) { msg.className = "sub-msg"; msg.textContent = "保存しています…"; }
+    SB.rpc("set_my_avatar", { choice: v }).then(function (res) {
+      if (res.error) {
+        if (msg) { msg.className = "sub-msg bad"; msg.textContent = /set_my_avatar|function/i.test(res.error.message || "") ? "データベースの準備がまだです(運営に db/avatar.sql の実行を頼んでください)。" : dbErr(res.error); }
+        return;
+      }
+      AUTH.avatar = res.data || "";
+      render(true);
+      var m2 = document.getElementById("av-msg"); if (m2) { m2.className = "sub-msg ok"; m2.textContent = "アイコンを変えました。"; }
+    });
+  }
+
   /* ----- account page ----- */
   function viewAccount() {
     var g = acctGate();
+    if (!g && !S.myMatches) setTimeout(loadMyMatches, 0);
     return acctHead("ACCOUNT", "あなたのアカウント", "ACCOUNT") + '<section class="section tight"><div class="wrap" style="display:flex;flex-direction:column;gap:32px">' + (g ||
-      '<div class="acct-card"><span class="acct-ini big">' + esc(AUTH.name.slice(0, 1).toUpperCase()) + '</span><div style="display:flex;flex-direction:column;gap:6px"><span class="mincho" style="font-size:24px">' + esc(AUTH.name) + '</span><span class="mono muted" style="font-size:11px">DISCORD · ' + esc(ROLE_JP[AUTH.role] || "—") + "</span></div></div>" +
+      '<div class="acct-card"><span id="acct-av-big">' + myAvatar("big") + '</span><div style="display:flex;flex-direction:column;gap:6px"><span class="mincho" style="font-size:24px">' + esc(AUTH.name) + '</span><span class="mono muted" style="font-size:11px">DISCORD · ' + esc(ROLE_JP[AUTH.role] || "—") + "</span></div></div>" +
+      avatarPicker() +
       '<div class="acct-links"><a class="card acct-link" href="#submit"><span class="mono gold" style="font-size:10px">SUBMIT</span><span class="mincho" style="font-size:20px">試合を登録する</span><span class="muted" style="font-size:13px">' + (AUTH.role === "member" ? "登録した試合は、承認されてから集計に入ります。" : "登録した試合は、すぐ集計に入ります(同じ試合がすでにあるときは承認待ち)。") + "</span></a>" +
       (canReview() ? '<a class="card acct-link" href="#review"><span class="mono gold" style="font-size:10px">REVIEW</span><span class="mincho" style="font-size:20px">承認する</span><span class="muted" style="font-size:13px">承認待ちの試合を確認します。' + (AUTH.role === "admin" ? "メンバーの役割もここで変えられます。" : AUTH.role === "manager" ? "一般と信頼ユーザーの切り替えもここでできます。" : "") + "</span></a>" : "") +
       '<a class="card acct-link" href="#me"><span class="mono gold" style="font-size:10px">MY PAGE</span><span class="mincho" style="font-size:20px">マイページ</span><span class="muted" style="font-size:13px">自分の勝率や得意ヒーローを見ます。</span></a></div>' +
@@ -1083,7 +1133,7 @@
     return '<div class="sub-row" data-side="' + side + '" data-lane="' + L + '"><span class="mono sub-lane">' + L + '</span><span class="sub-face" id="' + id + '-face"><span class="portrait sm"></span></span>' +
       '<label class="sr" for="' + id + '">' + (own ? "味方" : "敵") + "の" + L + '</label><input id="' + id + '" class="sub-hero" list="hero-names" autocomplete="off" placeholder="ヒーロー名" data-hero-input="' + id + '">' +
       (own ? '<label class="sub-me" title="自分が使ったヒーロー"><input type="radio" name="f-me" value="' + L + '"><span>自分</span></label>' : '<span class="sub-me-pad"></span>') +
-      '<span class="sub-kda" role="group" aria-label="' + (own ? "味方" : "敵") + "の" + L + 'のKDA">' + ["K", "D", "A"].map(function (x) { return '<input type="number" inputmode="numeric" min="0" max="99" placeholder="' + x + '" aria-label="' + x + '" data-kda="' + x + '">'; }).join("") + "</span></div>";
+      '<span class="sub-kda" role="group" aria-label="' + (own ? "味方" : "敵") + "の" + L + 'のKDA">' + ["K", "D", "A"].map(function (x) { return '<input type="number" inputmode="numeric" min="0" max="99" placeholder="' + x + '" aria-label="' + x + '" data-kda="' + x + '">'; }).join("") + "</span><div class=\"sub-items\" id=\"" + id + "-items\" hidden></div></div>";
   }
   function viewSubmit() {
     var g = acctGate(), today = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
@@ -1091,12 +1141,18 @@
     var last = S.subLast || {};
     return acctHead("SUBMIT", "試合を登録する", "SUBMIT") + '<section class="section tight"><div class="wrap" style="display:flex;flex-direction:column;gap:48px">' + (g ||
       '<form id="sub-form" class="sub-form" novalidate>' + heroDatalist() +
+        '<div class="rec-box" id="rec-box"><div style="display:flex;flex-direction:column;gap:6px"><span class="mono gold" style="font-size:10px">SCREENSHOT · スクショから読み取る</span>' +
+          '<span class="muted" style="font-size:13px">試合結果の画面のスクショを選ぶか、この画面に貼り付ける(Ctrl+V)と、10体・KDA・装備・戦闘番号・試合時間・勝敗を読み取って下に入れます。読み取りはこの端末の中だけで行い、プレイヤー名は読みません。</span></div>' +
+          '<label class="btn ghost rec-pick"><input type="file" id="rec-file" accept="image/*" hidden>画像を選ぶ</label><div id="rec-status" class="sub-msg" role="status" aria-live="polite"></div></div>' +
         '<div class="sub-meta">' +
           '<label class="sub-field"><span class="mono">日付</span><input type="date" id="f-date" value="' + (last.date || today) + '" max="' + today + '" required></label>' +
           sel("f-rank", "ランク帯", [["", "—"]].concat(RANKS.map(function (r) { return [r, r]; })), last.rank || "Mythic") +
+          '<label class="sub-field"><span class="mono">星の数</span><input type="number" id="f-stars" inputmode="numeric" min="0" max="9999" placeholder="例: 57" value="' + esc(last.stars != null ? String(last.stars) : "") + '"></label>' +
           sel("f-party", "人数", PARTIES, last.party || "Solo") +
           '<label class="sub-field"><span class="mono">試合時間</span><input id="f-dur" placeholder="14:22" inputmode="numeric" pattern="\\d{1,2}:\\d{2}"></label>' +
-          '<label class="sub-field"><span class="mono">シーズン</span><input id="f-season" placeholder="例: S42" maxlength="10" value="' + esc(last.season || "") + '"></label>' +
+          '<label class="sub-field"><span class="mono">戦闘番号(結果画面の左下)</span><input id="f-battle" placeholder="例: 761072273980257240" inputmode="numeric" maxlength="40" autocomplete="off"></label>' +
+          (canManage() ? '<label class="sub-field"><span class="mono">シーズン(運営・管理者だけ変更できます)</span><input id="f-season" placeholder="例: S43" maxlength="4" value="' + esc(last.season || S.curSeason || "") + '"></label>'
+            : '<div class="sub-field"><span class="mono">シーズン</span><span id="f-season-now" class="serif num" style="font-size:22px;min-height:42px;display:flex;align-items:center">' + esc(S.curSeason || "—") + '</span><span class="muted" style="font-size:11px">運営が設定した今のシーズンで登録されます</span></div>') +
         "</div>" +
         '<fieldset class="sub-res"><legend class="mono">結果(自分のチーム)</legend><label><input type="radio" name="f-win" value="1"><span>WIN 勝ち</span></label><label><input type="radio" name="f-win" value="0"><span>LOSE 負け</span></label></fieldset>' +
         '<div class="sub-teams"><div class="sub-team"><h3 class="subh" style="margin:0">味方 <small class="muted">自分を選んで、自分のKDAは必ず入れてください</small></h3>' + LANE_ORDER.map(function (L) { return subRow("ally", L); }).join("") + "</div>" +
@@ -1114,7 +1170,12 @@
   function readForm() {
     var f = document.getElementById("sub-form"), out = { ally: {}, enemy: {}, kda: { ally: {}, enemy: {} } }, errs = [], used = {};
     out.played_on = f.querySelector("#f-date").value; out.rank = f.querySelector("#f-rank").value; out.party = f.querySelector("#f-party").value;
-    out.season = f.querySelector("#f-season").value.trim(); out.note = f.querySelector("#f-note").value.trim();
+    var fs = f.querySelector("#f-season"); out.season = fs ? fs.value.trim().toUpperCase() : ""; out.note = f.querySelector("#f-note").value.trim();
+    if (fs && out.season && !/^S\d{1,3}$/.test(out.season)) errs.push("シーズンは S43 のように入れてください");
+    var bid = f.querySelector("#f-battle").value.replace(/[^0-9]/g, "");
+    if (bid && !/^\d{6,30}$/.test(bid)) errs.push("戦闘番号は、結果画面の左下にある数字をそのまま入れてください"); else if (bid) out.battle_id = bid;
+    var st = f.querySelector("#f-stars").value.trim();
+    if (st !== "") { if (!/^\d{1,4}$/.test(st)) errs.push("星の数は0〜9999の数字で入れてください"); else out.stars = Number(st); }
     var w = f.querySelector('input[name="f-win"]:checked'); if (!w) errs.push("勝ち・負けを選んでください"); else out.win = w.value === "1";
     var me = f.querySelector('input[name="f-me"]:checked'); if (!me) errs.push("味方のうち、自分のヒーローを選んでください"); else out.my_lane = me.value;
     var dur = f.querySelector("#f-dur").value.trim(), dm = dur.match(/^(\d{1,2})[:：](\d{2})$/);
@@ -1130,7 +1191,111 @@
       else if (v.some(function (x) { return x != null; })) errs.push((side === "ally" ? "味方" : "敵") + "の " + L + " のKDAは3つとも入れるか、空にしてください");
     });
     if (out.my_lane && !out.kda.ally[out.my_lane]) errs.push("自分のKDAを入れてください");
+    if (!errs.length) recPayload(out);
     return { payload: out, errs: errs };
+  }
+
+  /* ---- screenshot reader (recog.js): references come from the DB, cached in this browser ---- */
+  var REC_KEY = "veil-rec-refs-v1", REC_READY = null;
+  function recRefs() {
+    if (REC_READY) return REC_READY;
+    if (!SB) return (REC_READY = Promise.resolve());
+    REC_READY = SB.from("icon_refs").select("id").order("id", { ascending: false }).limit(1).then(function (r) {
+      var top = r.data && r.data[0] ? r.data[0].id : 0, cache = null;
+      try { cache = JSON.parse(localStorage.getItem(REC_KEY) || "null"); } catch (e) {}
+      if (cache && cache.top === top && cache.refs) return cache.refs;
+      return fetchAll("icon_refs", "id,kind,label,img", ["id"]).then(function (refs) {
+        try { localStorage.setItem(REC_KEY, JSON.stringify({ top: top, refs: refs })); } catch (e) {}
+        return refs;
+      });
+    }).then(function (refs) { return window.VEIL_RECOG.setRefs(refs || []); }).catch(function () { REC_READY = null; });
+    return REC_READY;
+  }
+  /* item name for any id: finished items, then intermediate / basic items */
+  function itemName(id) {
+    var G = window.VEIL_GEAR || {}, it = (G.items || {})[id] || (G.parts || {})[id];
+    return id === "other" ? "一覧にない装備" : it ? it.name : id;
+  }
+  function recItemOptions(sel) {
+    var G = window.VEIL_GEAR || {}, grp = function (label, map) {
+      var ids = Object.keys(map || {}).sort(function (a, b) { return map[a].name.localeCompare(map[b].name, "ja"); });
+      return '<optgroup label="' + label + '">' + ids.map(function (id) { return '<option value="' + id + '"' + (id === sel ? " selected" : "") + ">" + esc(map[id].name) + "</option>"; }).join("") + "</optgroup>";
+    };
+    return '<option value="">—(入れない)</option><option value="other"' + (sel === "other" ? " selected" : "") + ">一覧にない装備</option>" +
+      grp("完成装備", G.items) + grp("中間・基本装備", G.parts);
+  }
+  function readShot(file) {
+    var st = document.getElementById("rec-status"); if (!st) return;
+    if (!window.VEIL_RECOG) { st.className = "sub-msg bad"; st.textContent = "読み取りの準備ができていません。ページを読み込み直してください。"; return; }
+    if (!file || !/^image\//.test(file.type)) { st.className = "sub-msg bad"; st.textContent = "画像ファイルを選んでください。"; return; }
+    st.className = "sub-msg"; st.textContent = "読み取っています…";
+    var url = URL.createObjectURL(file);
+    Promise.all([recRefs(), window.VEIL_RECOG.loadImage(url)]).then(function (x) {
+      var a = window.VEIL_RECOG.analyze(x[1]); URL.revokeObjectURL(url); recFill(a);
+    }).catch(function (e) { st.className = "sub-msg bad"; st.textContent = "読み取れませんでした(" + (e && e.message || "画像を開けません") + ")。"; });
+  }
+  function recFill(a) {
+    var f = document.getElementById("sub-form"), st = document.getElementById("rec-status"); if (!f) return;
+    var laneGames = function (id) { var s = (window.VEIL_STATS || {})[id], o = {}; if (s) Object.keys(s.lane).forEach(function (L) { o[L] = s.lane[L].games; }); return o; };
+    var map = {}, known = 0, kdaOk = 0;
+    ["ally", "enemy"].forEach(function (side) {
+      var rows = a.rows.filter(function (r) { return r.side === side; }).sort(function (x, y) { return x.row - y.row; });
+      var ids = rows.map(function (r) { return r.hero.label && CH[r.hero.label] ? r.hero.label : null; });
+      var lanes = window.VEIL_RECOG.lanes(ids, rows.map(function (r) { return r.mark; }), function (id) { return CH[id]; }, laneGames);
+      rows.forEach(function (r, i) {
+        var L = lanes[i], id = "f-" + side + "-" + L; r.lane = L; map[side + ":" + L] = r;
+        var inp = document.getElementById(id); if (!inp) return;
+        inp.value = ids[i] ? CH[ids[i]].name + " (" + CH[ids[i]].en + ")" : ""; subFace(inp); if (ids[i]) known++;
+        var ks = inp.closest(".sub-row").querySelectorAll("[data-kda]");
+        if (r.kda.every(function (k) { return k.sure; })) { r.kda.forEach(function (k, j) { ks[j].value = String(Number(k.text)); }); kdaOk++; }
+        else r.kda.forEach(function (k, j) { ks[j].value = k.sure ? String(Number(k.text)) : ""; });
+        var box = document.getElementById(id + "-items");
+        box.innerHTML = '<span class="rec-face" title="画面の顔"><img src="' + r.face + '" alt="画面の顔"></span>' + (r.mark ? '<span class="tag dim" style="font-size:9px">' + (r.mark === "JUNGLE" ? "ハントのマーク" : "足のマーク") + "</span>" : "") +
+          r.items.map(function (it, k) { return '<label class="rec-item"><img src="' + it.img + '" alt=""><span class="sr">' + (side === "ally" ? "味方" : "敵") + " " + L + " の装備" + (k + 1) + '</span><select data-item="' + k + '">' + recItemOptions(it.id || "") + "</select></label>"; }).join("");
+        box.hidden = false;
+      });
+    });
+    var me = a.meRow != null ? a.rows.filter(function (r) { return r.side === "ally" && r.row === a.meRow; })[0] : null;
+    f.querySelectorAll('input[name="f-me"]').forEach(function (x) { x.checked = !!me && x.value === me.lane; });
+    f.querySelectorAll('input[name="f-win"]').forEach(function (x) { x.checked = x.value === (a.win.value ? "1" : "0"); });
+    if (a.time.sure && a.time.text.length >= 3) { var tt = a.time.text; f.querySelector("#f-dur").value = tt.slice(0, tt.length - 2) + ":" + tt.slice(-2); }
+    if (a.battle.sure) f.querySelector("#f-battle").value = a.battle.text;
+    S.rec = { a: a, map: map };
+    var notes = [];
+    notes.push("ヒーロー " + known + "/10 体、KDA " + kdaOk + "/10 人ぶんを読み取りました。");
+    if (known < 10) notes.push("空いている欄は、下の「画面の顔」を見てヒーロー名を入れてください(入れた名前は、次からの読み取りに使われます)。");
+    notes.push("レーンは靴のマークとヒーローの種類から決めています。違っていたら直してください。");
+    if (!a.battle.sure) notes.push("戦闘番号は読み取れませんでした。");
+    if (!a.layoutOk) notes.push("この画面サイズはまだ慣れていないので、位置がずれているかもしれません。");
+    st.className = "sub-msg ok"; st.innerHTML = notes.map(esc).join("<br>");
+  }
+  /* what the submitter confirmed becomes new references: only the crops the reader got wrong or could not read */
+  function recPayload(out) {
+    var R0 = S.rec; if (!R0) return;
+    var icons = [], items = { ally: {}, enemy: {} }, push = function (kind, label, img) { if (icons.length < 120 && img) icons.push({ kind: kind, label: String(label), img: img }); };
+    ["ally", "enemy"].forEach(function (side) {
+      LANE_ORDER.forEach(function (L) {
+        var r = R0.map[side + ":" + L]; if (!r) return;
+        var hero = out[side][L]; if (hero && r.hero.label !== hero) push("hero", hero, r.face);
+        var ids = [];
+        document.querySelectorAll("#f-" + side + "-" + L + "-items select[data-item]").forEach(function (sel) {
+          var it = r.items[Number(sel.getAttribute("data-item"))]; if (!sel.value) return;
+          ids.push(sel.value); if (it && it.id !== sel.value) push("item", sel.value, it.img);
+        });
+        if (ids.length) items[side][L] = ids;
+        r.items.forEach(function (it) { if (it.badge && it.badge.lane && it.badge.lane !== L) push("badge", "none", it.badge.img); });
+        var kv = (out.kda[side] || {})[L];
+        if (kv) r.kda.forEach(function (cell, j) { var t = String(kv[j]); if (cell.glyphs.length !== t.length) return; cell.glyphs.forEach(function (g, n) { if (g.label !== t[n]) push("kda", t[n], g.img); }); });
+      });
+    });
+    var a = R0.a;
+    if (out.battle_id && a.battle.glyphs.length === out.battle_id.length) a.battle.glyphs.forEach(function (g, n) { if (g.label !== out.battle_id[n]) push("bid", out.battle_id[n], g.img); });
+    if (out.duration_sec != null) {
+      var tt = Math.floor(out.duration_sec / 60) + ("0" + out.duration_sec % 60).slice(-2);
+      while (tt.length < a.time.glyphs.length) tt = "0" + tt;
+      if (a.time.glyphs.length === tt.length) a.time.glyphs.forEach(function (g, n) { if (g.label !== tt[n]) push("time", tt[n], g.img); });
+    }
+    out.items = items; if (icons.length) out.icons = icons;
   }
   function sendForm() {
     var r = readForm(), msg = document.getElementById("sub-msg"), btn = document.getElementById("sub-send");
@@ -1140,12 +1305,15 @@
       btn.disabled = false;
       if (res.error) { msg.className = "sub-msg bad"; msg.textContent = dbErr(res.error); return; }
       var d = res.data || {};
-      S.subLast = { date: r.payload.played_on, rank: r.payload.rank, party: r.payload.party, season: r.payload.season };
+      S.subLast = { date: r.payload.played_on, rank: r.payload.rank, party: r.payload.party, season: r.payload.season, stars: r.payload.stars };
       S.myMatches = null;   /* My Page reloads your matches next time */
+      if (S.rec && res.data) REC_READY = null;   /* new references may arrive once approved */
+      S.rec = null; document.querySelectorAll(".sub-items").forEach(function (b) { b.hidden = true; b.innerHTML = ""; });
+      var rs = document.getElementById("rec-status"); if (rs) rs.textContent = "";
       msg.className = "sub-msg ok";
       msg.textContent = d.status === "approved" ? "登録しました(No." + d.id + ")。集計には15分ほどで反映されます。" : "登録しました(No." + d.id + ")。承認されると集計に入ります。" + (d.dup_of ? "同じ試合(No." + d.dup_of + ")がすでにあるので、運営が確認します。" : "");
       var f = document.getElementById("sub-form");
-      f.querySelectorAll(".sub-hero, [data-kda], #f-note, #f-dur").forEach(function (x) { x.value = ""; if (x.classList.contains("sub-hero")) subFace(x); });
+      f.querySelectorAll(".sub-hero, [data-kda], #f-note, #f-dur, #f-battle").forEach(function (x) { x.value = ""; if (x.classList.contains("sub-hero")) subFace(x); });
       f.querySelectorAll('input[name="f-win"], input[name="f-me"]').forEach(function (x) { x.checked = false; });
       loadMySubs();
     });
@@ -1158,7 +1326,16 @@
         (p.k != null ? '<span class="num rv-kda">' + p.k + "/" + p.d + "/" + p.a + "</span>" : "") + (p.me ? "<b>" + (opts.meLabel || "YOU") + "</b>" : "") + "</span>";
     }).join("") + "</div>";
   }
+  function loadSeason(done) {
+    if (!SB) return;
+    SB.rpc("current_season").then(function (r) { if (!r.error && r.data) { S.curSeason = r.data; if (done) done(r.data); } });
+  }
   function loadMySubs() {
+    loadSeason(function (v) {
+      var n = document.getElementById("f-season-now"); if (n) n.textContent = v;
+      var e = document.getElementById("f-season"); if (e && !e.value) e.value = v;
+      var rs = document.getElementById("rv-season"); if (rs && !rs.value) rs.value = v;
+    });
     var box = document.getElementById("my-subs"); if (!box || !SB) return;
     SB.rpc("my_matches", { lim: 200 }).then(function (res) {
       if (!document.getElementById("my-subs")) return;
@@ -1167,7 +1344,7 @@
       if (!rows.length) { box.innerHTML = '<p class="muted" style="font-size:14px">まだ登録した試合はありません。</p>'; return; }
       box.innerHTML = '<ol class="mlog">' + rows.map(function (m) {
         var picks = Object.keys(m.picks || {}).map(function (k) { var a = k.split(":"); var me = a[0] === "ally" && a[1] === m.my_lane; return { side: a[0], lane: a[1], hero: m.picks[k], me: me, k: me ? m.k : null, d: me ? m.d : null, a: me ? m.a : null }; });
-        return '<li class="mlog-row sub-mine"><div class="mlog-info"><span class="mono muted" style="font-size:10px">No.' + m.id + '</span><span class="num">' + esc(String(m.played_on).replace(/-/g, ".")) + '</span><span><span class="mlog-res ' + (m.win ? "w" : "l") + '">' + (m.win ? "WIN" : "LOSE") + '</span> <span class="tag ' + (m.status === "approved" ? "" : m.status === "rejected" ? "warn" : "dim") + '" style="font-size:9px;padding:2px 6px">' + STATUS_JP[m.status] + "</span></span>" +
+        return '<li class="mlog-row sub-mine"><div class="mlog-info"><span class="mono muted" style="font-size:10px">No.' + m.id + (m.season ? " · " + esc(m.season) : "") + (m.stars != null ? " · ★" + m.stars : "") + '</span><span class="num">' + esc(String(m.played_on).replace(/-/g, ".")) + '</span><span><span class="mlog-res ' + (m.win ? "w" : "l") + '">' + (m.win ? "WIN" : "LOSE") + '</span> <span class="tag ' + (m.status === "approved" ? "" : m.status === "rejected" ? "warn" : "dim") + '" style="font-size:9px;padding:2px 6px">' + STATUS_JP[m.status] + "</span></span>" +
           (m.reject_reason ? '<span class="muted" style="font-size:12px">理由: ' + esc(m.reject_reason) + "</span>" : "") +
           (m.status !== "approved" ? '<button class="chip" type="button" data-action="sub-withdraw" data-id="' + m.id + '" style="min-height:32px;align-self:flex-start">取り下げる</button>' : "") + "</div>" +
           teamFaces(picks, "ally") + '<span class="mono muted mlog-vs">VS</span>' + teamFaces(picks, "enemy") + "</li>";
@@ -1179,10 +1356,13 @@
   function viewReview() {
     var g = acctGate(canReview);
     return acctHead("REVIEW", "承認待ちの試合", "REVIEW") + '<section class="section tight"><div class="wrap" style="display:flex;flex-direction:column;gap:72px">' + (g ||
+      (canManage() ? "<div>" + secHead("00", "SEASON", "今のシーズン") + '<p class="muted" style="font-size:13px;margin-bottom:16px">新しく登録される試合は、このシーズンで記録されます。一般の人や信頼ユーザーは変えられません。シーズンが変わったらここを更新してください。</p>' +
+        '<div class="sub-actions"><label class="sr" for="rv-season">今のシーズン</label><input id="rv-season" class="rv-why" style="max-width:160px" maxlength="4" placeholder="例: S43" value="' + esc(S.curSeason || "") + '"><button class="chip on-gold" type="button" data-action="rv-season">保存する</button><span id="rv-season-msg" class="sub-msg" role="status" aria-live="polite"></span></div></div>' : "") +
       "<div>" + secHead("01", "PENDING", "承認待ち") + '<p class="muted" style="font-size:13px;margin-bottom:16px">内容が正しければ承認してください。承認した試合は15分ほどで集計に入ります。同じ試合が二重に登録されたときは、片方を却下してください。</p><div id="rv-list"><p class="muted">読み込み中…</p></div></div>' +
       (canManage() ? "<div>" + secHead("02", "MEMBERS", "メンバーと役割") + '<p class="muted" style="font-size:13px;margin-bottom:16px">一般 = 承認が必要 / 信頼ユーザー = すぐ集計に入る / 運営 = 承認と、一般・信頼ユーザーの切り替えができる / 管理者 = すべて' + (AUTH.role === "manager" ? "<br>運営が変えられるのは、一般と信頼ユーザーのあいだだけです。" : "") + '</p><div id="rv-members"><p class="muted">読み込み中…</p></div></div>' : "")) + "</div></section>";
   }
   function loadReview() {
+    loadSeason(function (v) { var rs = document.getElementById("rv-season"); if (rs && !rs.value) rs.value = v; });
     var box = document.getElementById("rv-list"); if (!box || !SB) return;
     SB.rpc("pending_matches", { lim: 100 }).then(function (res) {
       if (!document.getElementById("rv-list")) return;
@@ -1190,10 +1370,10 @@
       var rows = res.data || [];
       if (!rows.length) { box.innerHTML = '<div class="empty" style="padding:44px 24px"><span class="tag">CLEAR</span><h3>承認待ちの試合はありません</h3></div>'; return; }
       box.innerHTML = '<ol class="mlog">' + rows.map(function (m) {
-        return '<li class="mlog-row rv-row" id="rv-' + m.id + '"><div class="mlog-info"><span class="mono muted" style="font-size:10px">No.' + m.id + " · " + esc(m.submitter || "?") + "(" + esc(ROLE_JP[m.submitter_role] || "") + ')</span><span class="num">' + esc(String(m.played_on).replace(/-/g, ".")) + '</span><span><span class="mlog-res ' + (m.win ? "w" : "l") + '">' + (m.win ? "WIN" : "LOSE") + '</span> <span class="muted" style="font-size:12px">' + esc(m.rank || "—") + " · " + esc((PARTIES.filter(function (p) { return p[0] === m.party; })[0] || ["", m.party || "—"])[1]) + " · " + meDur(m.duration_sec) + "</span></span>" +
-          (m.dup_of ? '<span class="tag warn" style="font-size:9px;padding:2px 6px;align-self:flex-start">No.' + m.dup_of + " と同じ試合かも</span>" : "") + (m.note ? '<span class="muted" style="font-size:12px">メモ: ' + esc(m.note) + "</span>" : "") +
+        return '<li class="mlog-row rv-row" id="rv-' + m.id + '"><div class="mlog-info"><span class="mono muted" style="font-size:10px">No.' + m.id + " · " + esc(m.submitter || "?") + "(" + esc(ROLE_JP[m.submitter_role] || "") + ')</span><span class="num">' + esc(String(m.played_on).replace(/-/g, ".")) + '</span><span><span class="mlog-res ' + (m.win ? "w" : "l") + '">' + (m.win ? "WIN" : "LOSE") + '</span> <span class="muted" style="font-size:12px">' + esc(m.season || "") + " " + esc(m.rank || "—") + (m.stars != null ? " ★" + m.stars : "") + " · " + esc((PARTIES.filter(function (p) { return p[0] === m.party; })[0] || ["", m.party || "—"])[1]) + " · " + meDur(m.duration_sec) + "</span></span>" +
+          (m.battle_id ? '<span class="mono muted" style="font-size:10px">戦闘番号 ' + esc(m.battle_id) + "</span>" : "") + (m.dup_of ? '<span class="tag warn" style="font-size:9px;padding:2px 6px;align-self:flex-start">No.' + m.dup_of + (m.battle_id ? " と戦闘番号か内容が同じ</span>" : " と同じ試合かも</span>") : "") + (m.note ? '<span class="muted" style="font-size:12px">メモ: ' + esc(m.note) + "</span>" : "") +
           '<span class="rv-btns"><button class="chip on-gold" type="button" data-action="rv-ok" data-id="' + m.id + '">承認</button><button class="chip" type="button" data-action="rv-ng" data-id="' + m.id + '">却下</button></span></div>' +
-          teamFaces(m.picks || [], "ally", { meLabel: "SENDER" }) + '<span class="mono muted mlog-vs">VS</span>' + teamFaces(m.picks || [], "enemy") + "</li>";
+          teamFaces(m.picks || [], "ally", { meLabel: "SENDER" }) + '<span class="mono muted mlog-vs">VS</span>' + teamFaces(m.picks || [], "enemy") + rvIcons(m.icons) + "</li>";
       }).join("") + "</ol>";
     });
     var mb = document.getElementById("rv-members"); if (!mb) return;
@@ -1203,11 +1383,20 @@
       mb.innerHTML = meTable(["名前", "役割", "承認済み", "承認待ち", "登録日"], (res.data || []).map(function (p) {
         var self = AUTH.user && p.id === AUTH.user.id, locked = self || (AUTH.role === "manager" && ROLE_LOW.indexOf(p.role) < 0);
         var opts = AUTH.role === "admin" ? Object.keys(ROLE_JP) : ROLE_LOW;
-        return "<tr><td>" + esc(p.name || "(名前なし)") + (self ? ' <span class="tag dim me-thin">あなた</span>' : "") + "</td><td>" +
+        return '<tr><td><span class="mem-name">' + avatarHtml(p.avatar || "", p.discord_avatar || "", p.name, "sm") + esc(p.name || "(名前なし)") + "</span>" + (self ? ' <span class="tag dim me-thin">あなた</span>' : "") + "</td><td>" +
           (locked ? '<span class="muted">' + esc(ROLE_JP[p.role] || p.role) + "</span>" :
           '<select class="rv-role" data-uid="' + p.id + '" aria-label="' + esc(p.name) + ' の役割">' + opts.map(function (k) { return '<option value="' + k + '"' + (k === p.role ? " selected" : "") + ">" + ROLE_JP[k] + "</option>"; }).join("") + "</select>") + '</td><td class="num">' + p.approved + '</td><td class="num">' + p.pending + '</td><td class="num muted">' + esc(String(p.created_at).slice(0, 10).replace(/-/g, ".")) + "</td></tr>";
       }));
     });
+  }
+  /* crops from the screenshot with the name the submitter gave them: they become references when the match is approved */
+  function rvIcons(icons) {
+    var list = (icons || []).filter(function (x) { return x.kind === "hero" || x.kind === "item"; });
+    if (!list.length) return "";
+    return '<div class="rv-icons"><span class="mono muted" style="font-size:9px">スクショの切り抜き · 承認すると次からの読み取りに使われます</span><div>' + list.map(function (x) {
+      var name = x.kind === "hero" ? (CH[x.label] ? CH[x.label].name : x.label) : itemName(x.label);
+      return '<span class="rv-icon"><img src="' + esc(x.img) + '" alt=""><span>' + esc(name) + "</span></span>";
+    }).join("") + "</div></div>";
   }
   function reviewAsk(id) {
     var row = document.getElementById("rv-" + id); if (!row) return;
@@ -1231,11 +1420,11 @@
   function header(cur) {
     return '<header class="site-header"><div class="wrap"><a class="logo" href="#home">' + LOGO + "<span>VEIL</span></a>" +
       '<nav class="nav" id="main-nav" aria-label="メインナビゲーション">' + NAV.map(function (n) { return '<a href="#' + n[0] + '"' + (cur === n[0] ? ' aria-current="page"' : "") + ">" + n[1] + "</a>"; }).join("") + "</nav>" +
-      '<div class="head-tools"><span class="tag demo-pill">DEMO DATA</span>' + accountBtn(cur) + '<a class="icon-btn' + (cur === "roulette" ? " on" : "") + '" href="#roulette" aria-label="ヒーロールーレット" title="ヒーロールーレット">' + IC.dice + '</a><button class="icon-btn" type="button" data-action="open-search" aria-label="サイト内検索">' + IC.search + '</button><button class="icon-btn menu-btn" type="button" data-action="menu" aria-label="メニューを開く" aria-expanded="false" aria-controls="main-nav">' + IC.menu + "</button></div></div></header>";
+      '<div class="head-tools">' + accountBtn(cur) + '<a class="icon-btn' + (cur === "roulette" ? " on" : "") + '" href="#roulette" aria-label="ヒーロールーレット" title="ヒーロールーレット">' + IC.dice + '</a><button class="icon-btn" type="button" data-action="open-search" aria-label="サイト内検索">' + IC.search + '</button><button class="icon-btn menu-btn" type="button" data-action="menu" aria-label="メニューを開く" aria-expanded="false" aria-controls="main-nav">' + IC.menu + "</button></div></div></header>";
   }
   function footer() {
     return '<footer class="site-footer"><div class="wrap top"><div style="display:flex;flex-direction:column;gap:16px"><a class="logo" href="#home">' + LOGO + "<span>VEIL</span></a>" +
-      '<p class="disclaimer">本サイトはMoontonとは無関係の非公式ファンサイトです。Mobile Legends: Bang Bang、ヒーロー名、アートワーク等の権利はMoontonに帰属します。掲載中のキャラクター・数値はすべて開発用のサンプル(DEMO)です。</p></div>' +
+      '<p class="disclaimer">本サイトはMoontonとは無関係の非公式ファンサイトです。Mobile Legends: Bang Bang、ヒーロー名、アートワーク等の権利はMoontonに帰属します。勝率などの数値は、VEILに登録されて承認された試合記録から集計しています。</p></div>' +
       '<div class="cols"><div class="col"><span class="mono gold">DATABASE</span><a href="#me">マイページ</a><a href="#champions">キャラクター図鑑</a><a href="#roulette">ヒーロールーレット</a><a href="#equipment">装備一覧</a><a href="#matchup">対面攻略</a><a href="#patch">パッチ・メタ</a></div><div class="col"><span class="mono gold">ARCHIVE</span><a href="#lore">世界観</a><a href="#home">HOME</a></div></div></div>' +
       '<div class="wrap bottom"><span class="mono muted">EVERY BATTLE LEAVES A TRACE.</span><span class="mono muted">VEIL · PROTOTYPE v0.2</span></div></footer>';
   }
@@ -1288,7 +1477,19 @@
       t.textContent = "SKIN " + (A2.i + 1) + " / " + A2.n + " ↻"; return; }
     if (act === "login") { S.loginErr = ""; login(); return; }
     if (act === "logout") { logout(); return; }
+    if (act === "av-set") { saveAvatar(t.getAttribute("data-v") || ""); return; }
+    if (act === "av-hero") { var avi = document.getElementById("av-hero"), avh = avi && heroFromInput(avi.value); if (!avh) { var am = document.getElementById("av-msg"); if (am) { am.className = "sub-msg bad"; am.textContent = "ヒーロー名が見つかりません。候補から選んでください。"; } return; } saveAvatar("hero:" + avh); return; }
     if (act === "sub-withdraw") { t.disabled = true; SB.rpc("withdraw_match", { match_id: Number(t.getAttribute("data-id")) }).then(function (res) { if (res.error) { t.disabled = false; t.textContent = dbErr(res.error); } else loadMySubs(); }); return; }
+    if (act === "rv-season") {
+      var sv = document.getElementById("rv-season"), sm = document.getElementById("rv-season-msg"), val = (sv.value || "").trim().toUpperCase();
+      if (!/^S\d{1,3}$/.test(val)) { sm.className = "sub-msg bad"; sm.textContent = "S43 のように入れてください"; return; }
+      t.disabled = true;
+      SB.rpc("set_current_season", { season: val }).then(function (res) {
+        t.disabled = false;
+        if (res.error) { sm.className = "sub-msg bad"; sm.textContent = dbErr(res.error); return; }
+        S.curSeason = val; sv.value = val; sm.className = "sub-msg ok"; sm.textContent = "今のシーズンを " + val + " にしました";
+      });
+      return; }
     if (act === "rv-ok") { reviewOne(t.getAttribute("data-id"), true, t); return; }
     if (act === "rv-ng") { reviewAsk(t.getAttribute("data-id")); return; }
     if (act === "rv-ng-go") { reviewOne(t.getAttribute("data-id"), false, t); return; }
@@ -1383,12 +1584,18 @@
   document.addEventListener("change", function (ev) {
     var t = ev.target, b = t.getAttribute("data-bind");
     if (b === "cf-sort") { S.cf.sort = t.value; document.getElementById("champ-grid").innerHTML = champGrid(); }
+    if (t.id === "rec-file") { if (t.files && t.files[0]) readShot(t.files[0]); t.value = ""; return; }
     if (t.hasAttribute && t.hasAttribute("data-hero-input")) { var hid2 = heroFromInput(t.value); if (hid2) t.value = CH[hid2].name + " (" + CH[hid2].en + ")"; subFace(t); return; }
     if (t.classList && t.classList.contains("rv-role")) { t.disabled = true; SB.rpc("set_role", { target: t.getAttribute("data-uid"), new_role: t.value }).then(function (res) { t.disabled = false; if (res.error) { var e2 = document.createElement("span"); e2.className = "sub-msg bad"; e2.textContent = dbErr(res.error); t.parentNode.appendChild(e2); loadReview(); } }); return; }
     if (b === "it-sort") { S.itf.sort = t.value; document.getElementById("item-grid").innerHTML = itemGrid(); }
     if (b === "q-you" || b === "l-you") S.lab.you = t.value;
     if (b === "q-enemy" || b === "l-enemy") S.lab.enemy = t.value;
     if (b === "q-lane" || b === "l-lane") S.lab.lane = t.value;
+  });
+  document.addEventListener("paste", function (ev) {
+    if (!document.getElementById("rec-box")) return;
+    var it = [].filter.call((ev.clipboardData || {}).items || [], function (x) { return x.kind === "file" && /^image\//.test(x.type); })[0];
+    if (it) { ev.preventDefault(); readShot(it.getAsFile()); }
   });
   document.addEventListener("submit", function (ev) {
     if (ev.target.id === "sub-form") { ev.preventDefault(); sendForm(); return; }
