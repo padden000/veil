@@ -4,8 +4,11 @@
    Player names, ratings and gold are never read.
    Layout: measured on a 2556×1179 screen; other sizes are scaled by height around the screen centre. */
 (function () {
-  var BASE = { W: 2556, H: 1179 };
-  var L = {
+  /* Positions are measured on two screen shapes. Phones (wide, 2556×1179) and tablets (iPad, 2360×1640) lay the
+     result screen out differently, so each has its own layout; the one closest to the screenshot's shape is used.
+     Both are written in "phone units": sizes inside a row (icons, digits, the boots mark) are the same in both. */
+  var PHONE = {
+    BASE: { W: 2556, H: 1179 },
     rows: [318, 468, 620, 770, 920],                         /* y of each player row (portrait centre) */
     portrait: { ally: 400, enemy: 2152, r: 58 },             /* portrait centre x, half size */
     face: [26, 18, 70, 70],                                  /* x, y, w, h inside the portrait crop: the face, no flag / level */
@@ -16,6 +19,29 @@
     time: [2343, 138, 2432, 180],
     title: [1060, 60, 1500, 140]
   };
+  /* tablet: measured in screen pixels on 2360×1640, then turned into phone units (the item spacing is 85.6 px there, 77 on phones) */
+  var TABLET = (function () {
+    var v = 77 / 85.6, k = function (a) { return a.map(function (x) { return x * v; }); };
+    return {
+      BASE: { W: 2360 * v, H: 1640 * v },
+      rows: k([512.5, 683, 854, 1024.5, 1195]),
+      portrait: { ally: 312.5 * v, enemy: 2050 * v, r: 58 },
+      face: PHONE.face,
+      items: { ally: k([450, 535.5, 621, 707, 792.5, 878]), enemy: k([1481, 1566.5, 1651.5, 1736.5, 1822.5, 1907.5]), dy: 30 * v, r: 31 },
+      kda: { ally: k([746.5, 805, 864]), enemy: k([1495, 1554, 1612.5]), half: 25, top: -58, bottom: -12 },
+      band: { ally: k([10, 1170]), top: -70, bottom: 75 },
+      battle: k([140, 1596, 448, 1639]),
+      time: k([1926, 308, 2030, 358]),
+      title: k([905, 62, 1460, 165])
+    };
+  })();
+  var LAYOUTS = [PHONE, TABLET];
+  var L = PHONE, BASE = PHONE.BASE;
+  function pickLayout(w, h) {
+    var a = w / h, best = PHONE;
+    LAYOUTS.forEach(function (x) { if (Math.abs(a - x.BASE.W / x.BASE.H) < Math.abs(a - best.BASE.W / best.BASE.H)) best = x; });
+    L = best; BASE = best.BASE; return best;
+  }
   var SZ = 24;                                               /* compare crops at 24×24 */
   var GLYPH = [12, 18];
 
@@ -67,7 +93,9 @@
   function counts() { var o = {}; Object.keys(REFS).forEach(function (k) { o[k] = REFS[k].length; }); return o; }
   function best(kind, v) {
     var by = {};
-    REFS[kind].forEach(function (r) { var s = dot(v, r.v); if (!(r.label in by) || s > by[r.label]) by[r.label] = s; });
+    /* digits: the battle number shows all ten digits, so its examples also stand in for KDA and match-time digits not seen yet */
+    var pool = kind === "kda" || kind === "time" ? REFS[kind].concat(REFS.bid) : REFS[kind];
+    pool.forEach(function (r) { var s = dot(v, r.v); if (!(r.label in by) || s > by[r.label]) by[r.label] = s; });
     var list = Object.keys(by).map(function (k) { return { label: k, score: by[k] }; }).sort(function (a, b) { return b.score - a.score; });
     return list;
   }
@@ -146,8 +174,8 @@
 
   /* ---- the whole screen ---- */
   function analyze(img) {
-    var W = img.naturalWidth || img.width, H = img.naturalHeight || img.height, G = geom(W, H);
-    var src = canvasOf(img, W, H), out = { size: [W, H], aspect: W / H, rows: [] };
+    var W = img.naturalWidth || img.width, H = img.naturalHeight || img.height, lay = pickLayout(W, H), G = geom(W, H);
+    var src = canvasOf(img, W, H), out = { size: [W, H], aspect: W / H, layout: lay === TABLET ? "tablet" : "phone", rows: [] };
     out.layoutOk = Math.abs(W / H - BASE.W / BASE.H) < 0.12;
     /* result: VICTORY is gold, so red+green clearly above blue */
     /* result: the VICTORY letters are gold; count gold pixels in the title */
