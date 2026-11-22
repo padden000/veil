@@ -36,10 +36,9 @@ language plpgsql security definer set search_path = '' as $$
 begin
   update public.icon_refs set status = 'approved' where match_id = mid and status = 'pending';
   delete from public.icon_refs r using (
-    select id, row_number() over (partition by kind, label order by id desc) as n,
-           case when label in ('none', 'other') then 40 when kind in ('kda', 'bid', 'time') then 6 else 4 end as keep
+    select id, row_number() over (partition by kind, label order by id desc) as n
     from public.icon_refs where status = 'approved' and match_id is not null
-  ) x where r.id = x.id and x.n > x.keep;
+  ) x where r.id = x.id and x.n > 100;
 end $$;
 
 create or replace function public.submit_match(payload jsonb) returns jsonb

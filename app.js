@@ -1213,7 +1213,8 @@
       var top = r.data && r.data[0] ? r.data[0].id : 0, cache = null;
       try { cache = JSON.parse(localStorage.getItem(REC_KEY) || "null"); } catch (e) {}
       if (cache && cache.top === top && cache.refs) return cache.refs;
-      return fetchAll("icon_refs", "id,kind,label,img", ["id"]).then(function (refs) {
+      /* only the newest few per name (icon_refs_active); an older database without the view gets the whole table */
+      return fetchAll("icon_refs_active", "id,kind,label,img", ["id"]).catch(function () { return fetchAll("icon_refs", "id,kind,label,img", ["id"]); }).then(function (refs) {
         try { localStorage.setItem(REC_KEY, JSON.stringify({ top: top, refs: refs })); } catch (e) {}
         return refs;
       });

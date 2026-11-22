@@ -1,1 +1,5 @@
 _test/
+dist/
+picture/
+# your own Supabase values for trying the site on this PC (copy config.example.js to config.js)
+config.js

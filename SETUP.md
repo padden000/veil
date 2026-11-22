@@ -16,8 +16,9 @@
 3. GitHub とつないで `padden000/veil` を選びます。
 4. ビルドの設定は次のとおりです。
    - Framework preset:**None**
-   - Build command:空欄
-   - Build output directory:空欄
+   - Build command:`node tools/build.js`
+   - Build output directory:`dist`
+   - 環境変数(**Variables and Secrets**):`SUPABASE_URL` と `SUPABASE_PUBLISHABLE_KEY`(値は手順 5 の2つ。Type は Text で大丈夫です)
 5. Project name を `veil-jpmeta` にして **Save and Deploy** を押します(作成済み)。
 6. URL は `https://veil-jpmeta.pages.dev` です。以下では **サイトURL** と呼びます。
 
@@ -65,7 +66,7 @@
 | Project URL | `https://xxxx.supabase.co` |
 | Publishable key | `sb_publishable_...` |
 
-この 2 つは、サイトに書いて公開しても大丈夫な値です。
+この 2 つは、サイトに書いて公開しても大丈夫な値です。コードには書かず、Cloudflare Pages の環境変数 `SUPABASE_URL` と `SUPABASE_PUBLISHABLE_KEY` に入れます(手元で試すときは `config.example.js` をコピーした `config.js` に入れます)。
 
 **送らないもの**:Secret key(`sb_secret_...`)、`service_role` キー、Database Password、Discord の Client Secret。
 
@@ -129,6 +130,10 @@ update public.settings set value = '50000' where key = 'max_matches';
 - 読み取れなかったヒーローや装備を本人が入れて送信し、その試合が承認されると、その切り抜きが次からの見本になります。使うほど当たるようになります。
 - **2026-11-22 より前に `setup.sql` を実行していた場合**は、`db/recog.sql` を 1 回貼って実行してください(最初の見本も入ります。中間装備 40 個の見本もここに入っています)。何回実行しても大丈夫です。
 - 詳しい仕組みは `RECOGNITION.md` にあります。
+
+## 切り抜きを 100 枚まで保管(2026-11-22)
+
+`db/keep_refs.sql` を 1 回貼って実行してください(何回実行しても大丈夫です)。承認した試合の切り抜きを、1 つのヒーロー・装備・数字につき 100 枚まで残します(これまでは 4 枚)。読み取りに使うのは新しい数枚だけなので、速さは変わりません。全部たまっても数十MBです。
 
 ## 登録した試合の編集と装備の表示(2026-11-22)
 

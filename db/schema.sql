@@ -104,16 +104,27 @@ create policy icon_refs_public on public.icon_refs for select to anon, authentic
 revoke all on public.icon_refs from anon, authenticated;
 grant select (id, kind, label, img) on public.icon_refs to anon, authenticated;
 
+-- what the reader downloads: every starting reference, plus the newest learned crops per name
+-- (40 for "no mark" / "not in the list", 6 per digit, 4 for each hero and item)
+create or replace view public.icon_refs_active as
+select id, kind, label, img from (
+  select id, kind, label, img, match_id,
+         row_number() over (partition by kind, label, (match_id is null) order by id desc) as n
+  from public.icon_refs where status = 'approved'
+) x
+where match_id is null
+   or n <= case when label in ('none', 'other') then 40 when kind in ('kda', 'bid', 'time') then 6 else 4 end;
+grant select on public.icon_refs_active to anon, authenticated;
+
 -- approved crops become references; only the newest few per label are kept
 create or replace function public.promote_icons(mid bigint) returns void
 language plpgsql security definer set search_path = '' as $$
 begin
   update public.icon_refs set status = 'approved' where match_id = mid and status = 'pending';
   delete from public.icon_refs r using (
-    select id, row_number() over (partition by kind, label order by id desc) as n,
-           case when label in ('none', 'other') then 40 when kind in ('kda', 'bid', 'time') then 6 else 4 end as keep
+    select id, row_number() over (partition by kind, label order by id desc) as n
     from public.icon_refs where status = 'approved' and match_id is not null
-  ) x where r.id = x.id and x.n > x.keep;
+  ) x where r.id = x.id and x.n > 100;
 end $$;
 
 -- ---------- row level security: nothing is readable or writable directly except below ----------
