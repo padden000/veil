@@ -2126,13 +2126,13 @@
   /* ---------------- generative light (drawn by code every frame, no footage) ----------------
      silk    — thousands of motes carried by a swirling flow field leave trails of light (default page headers)
      slime   — a slime-mould simulation: agents follow and lay down trails, a living network (MY PAGE)
-     mandel  — a slow dive into the Mandelbrot set, drawn on the graphics card (PATCH & META)
+     waves   — glowing harmonics and the wave they add up to, always changing (PATCH & META)
      fourier — the VEIL crest traced by spinning circles: a Fourier series of its outline (LORE ARCHIVE)
      Paused when off screen or in a background tab; not shown to people who ask for less motion. */
   var GFX = { list: [], raf: 0, io: null, small: Math.min(innerWidth, innerHeight) < 600 };
   function gfxKind() {
     var h = (location.hash || "#home").replace(/^#/, "").split("-")[0];
-    return h === "me" ? "slime" : h === "patch" ? "mandel" : h === "lore" ? "fourier" : "silk";
+    return h === "me" ? "slime" : h === "patch" ? "waves" : h === "lore" ? "fourier" : "silk";
   }
   function mountGfx() {
     GFX.list.forEach(function (g) { if (g.stop) g.stop(); });
@@ -2161,7 +2161,7 @@
       var r = g.cv.getBoundingClientRect(); if (!r.width) return;
       any = true;
       if (Math.abs(r.width - g.w) > 1 || Math.abs(r.height - g.h) > 1) { g.w = r.width; g.h = r.height; g.resize(); }
-      g.frame((now - g.t0) / 1000);
+      g.frame(Math.max(0, now - g.t0) / 1000);   /* the first frame's timestamp can be a little before the canvas was made */
     });
     if (any && !document.hidden) GFX.raf = requestAnimationFrame(stepGfx);
   }
@@ -2240,27 +2240,37 @@
       };
       return true;
     },
-    mandel: function (g) {
-      var gl = g.cv.getContext("webgl", { premultipliedAlpha: true, antialias: false, alpha: true }); if (!gl) return false;
-      var hp = gl.getShaderPrecisionFormat(gl.FRAGMENT_SHADER, gl.HIGH_FLOAT).precision > 0 ? "highp" : "mediump";
-      var fs = "precision " + hp + " float;uniform vec2 R;uniform float T;uniform float Z;uniform vec2 C;" +
-        "void main(){vec2 p=(gl_FragCoord.xy-.5*R)/R.y;vec2 c=C+p*Z;vec2 z=vec2(0.);float n=0.;const int M=" + (GFX.small ? 80 : 130) + ";" +
-        "for(int i=0;i<M;i++){z=vec2(z.x*z.x-z.y*z.y,2.*z.x*z.y)+c;if(dot(z,z)>256.)break;n+=1.;}" +
-        "float fa=clamp((gl_FragCoord.x/R.x-.15)/.45,0.,1.)*clamp(gl_FragCoord.y/(R.y*.25),0.,1.);" +
-        "if(n>=float(M)){gl_FragColor=vec4(0.);return;}" +
-        "float s=n-log2(log2(dot(z,z)))+4.;float k=s*.045+T*.03;" +
-        "vec3 col=.5+.5*cos(6.2831*(k+vec3(.02,.12,.28)));col=mix(col*vec3(1.,.72,.38),vec3(.25,.75,.95)*col.b,smoothstep(.55,1.,col.b)*.6);" +
-        "float edge=exp(-s*.035);col*=1.15-edge*.2;col*=smoothstep(0.,1.2,1.4-length(p*vec2(.7,1.)));" +
-        "float al=clamp(max(col.r,max(col.g,col.b)),0.,1.)*fa;gl_FragColor=vec4(col*.85*fa,al);}";
-      var prog = glProg(gl, fs); if (!prog) return false;
-      var S = .5;
-      g.resize = function () { g.cv.width = Math.round(g.w * S); g.cv.height = Math.round(g.h * S); gl.viewport(0, 0, g.cv.width, g.cv.height); };
-      var C = [-0.7436438870371587, 0.1318259042053120];
+    waves: function (g) {
+      /* several harmonics (thin, faint) and the wave they add up to (bright), slowly changing their amplitudes and phases */
+      var ctx = g.cv.getContext("2d"), dpr = Math.min(devicePixelRatio || 1, 1.5), fade = null;
+      var H5 = [{ f: 1, a: 1, c: [240, 196, 128] }, { f: 2, a: .55, c: [232, 96, 110] }, { f: 3, a: .38, c: [150, 120, 255] }, { f: 5, a: .24, c: [110, 200, 220] }, { f: 7, a: .16, c: [255, 226, 170] }];
+      g.resize = function () {
+        g.cv.width = Math.round(g.w * dpr); g.cv.height = Math.round(g.h * dpr); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        fade = ctx.createLinearGradient(0, 0, g.w, 0); fade.addColorStop(0, "rgba(0,0,0,0)"); fade.addColorStop(.2, "rgba(0,0,0,.25)"); fade.addColorStop(.55, "rgba(0,0,0,1)"); fade.addColorStop(1, "rgba(0,0,0,1)");
+      };
+      function glow(pts, c, alpha, wide) {
+        [[wide * 7, .07], [wide * 2.6, .28], [Math.max(.8, wide * .9), 1]].forEach(function (L) {
+          ctx.lineWidth = L[0]; ctx.strokeStyle = "rgba(" + c[0] + "," + c[1] + "," + c[2] + "," + (L[1] * alpha).toFixed(3) + ")";
+          ctx.beginPath(); ctx.moveTo(pts[0][0], pts[0][1]); for (var i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]); ctx.stroke();
+        });
+      }
       g.frame = function (t) {
-        var cyc = 48, u = (t % cyc) / cyc, z = 2.6 * Math.pow(hp === "highp" ? 1.6e-5 : 6e-4, u);   /* zoom in, then start again */
-        gl.uniform2f(prog.R, g.cv.width, g.cv.height); gl.uniform1f(prog.T, t); gl.uniform1f(prog.Z, z); gl.uniform2f(prog.C, C[0], C[1]);
-        gl.drawArrays(gl.TRIANGLES, 0, 6);
-        g.cv.style.opacity = String(Math.min(1, Math.min(u, 1 - u) * 12) * .9);
+        var W = g.w, H = g.h, cy = H * .5, A = H * .2, k = 2 * Math.PI * 2.2 / W, step = Math.max(3, W / 260);
+        ctx.globalCompositeOperation = "source-over"; ctx.clearRect(0, 0, W, H); ctx.lineCap = "round"; ctx.lineJoin = "round";
+        ctx.globalCompositeOperation = "lighter";
+        var sum = [];
+        H5.forEach(function (h, j) {
+          var amp = A * h.a * (.75 + .25 * Math.sin(t * .35 + j * 1.7)), ph = t * (.5 + j * .18) + j, pts = [];
+          for (var x = 0, i = 0; x <= W + step; x += step, i++) { var y = amp * Math.sin(k * h.f * x - ph); pts.push([x, cy + y * .55 + (j - 2) * H * .09]); sum[i] = (sum[i] || 0) + y; }
+          glow(pts, h.c, .35, .8);
+        });
+        var tot = []; for (var i2 = 0; i2 < sum.length; i2++) tot.push([i2 * step, cy + sum[i2] * .62]);
+        glow(tot, [255, 214, 150], 1, 1.6);
+        /* a travelling spark along the summed wave */
+        var si = Math.floor(((t * .12) % 1) * (tot.length - 1)), sp = tot[si]; ctx.fillStyle = "rgba(255,244,220,.95)"; ctx.beginPath(); ctx.arc(sp[0], sp[1], 2.6, 0, 6.283); ctx.fill();
+        ctx.fillStyle = "rgba(255,210,140,.18)"; ctx.beginPath(); ctx.arc(sp[0], sp[1], 12, 0, 6.283); ctx.fill();
+        /* fade toward the title on the left */
+        ctx.globalCompositeOperation = "destination-in"; ctx.fillStyle = fade; ctx.fillRect(0, 0, W, H);
       };
       return true;
     },
@@ -2318,16 +2328,7 @@
       return true;
     }
   };
-  function glProg(gl, fsrc) {
-    var mk = function (type, src) { var s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s); return gl.getShaderParameter(s, gl.COMPILE_STATUS) ? s : null; };
-    var vs = mk(gl.VERTEX_SHADER, "attribute vec2 a;void main(){gl_Position=vec4(a,0.,1.);}"), fs = mk(gl.FRAGMENT_SHADER, fsrc);
-    if (!vs || !fs) return null;
-    var p = gl.createProgram(); gl.attachShader(p, vs); gl.attachShader(p, fs); gl.linkProgram(p); if (!gl.getProgramParameter(p, gl.LINK_STATUS)) return null;
-    gl.useProgram(p);
-    var b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1]), gl.STATIC_DRAW);
-    var loc = gl.getAttribLocation(p, "a"); gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
-    return { R: gl.getUniformLocation(p, "R"), T: gl.getUniformLocation(p, "T"), Z: gl.getUniformLocation(p, "Z"), C: gl.getUniformLocation(p, "C") };
-  }
+
 
   /* ---------------- layout ---------------- */
   var NAV = [["home", "HOME"], ["me", "MY PAGE"], ["champions", "CHAMPIONS"], ["equipment", "EQUIPMENT"], ["matchup", "MATCHUP LAB"], ["patch", "PATCH &amp; META"], ["lore", "LORE ARCHIVE"]];

@@ -889,7 +889,6 @@ tr.rv-banned td { background: rgba(113,32,42,.18); }
 .gfx { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 0; pointer-events: none; }
 .gfx-silk { opacity: .9; }
 .gfx-slime { opacity: .85; }
-.gfx-mandel { transition: opacity .3s; }
 .phead .embers { z-index: 1; }
 @media (prefers-reduced-motion: reduce) { .gfx { display: none; } }
 
