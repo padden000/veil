@@ -84,6 +84,7 @@
     var h = opts.h || 360;
     return '<div class="atmo" aria-hidden="true">' +
       '<div class="plx" style="--d:.15"><div style="position:absolute;inset:0;background:radial-gradient(ellipse 55% 60% at ' + (opts.lx || 70) + '% 25%, rgba(185,154,104,.15), transparent 70%), radial-gradient(ellipse 45% 55% at 5% 100%, rgba(113,32,42,.38), transparent 70%), radial-gradient(ellipse 80% 60% at 50% 0%, rgba(101,113,125,.12), transparent 70%)"></div></div>' +
+      '<div class="plx" style="--d:.25"><div class="rays"></div></div>' +
       (opts.far === false ? "" : '<div class="plx" style="--d:.35"><svg class="ruins" viewBox="0 0 1440 460" preserveAspectRatio="xMidYMax slice" style="height:' + Math.round(h * 1.3) + 'px;opacity:.9"><path fill="#141418" fill-rule="evenodd" d="' + ruins(1440, 460, 150, 6, opts.seed || 7, 230) + '"/></svg></div>') +
       '<div class="plx" style="--d:.55"><div class="fog" style="bottom:40px;height:' + Math.round(h * .8) + 'px;background:radial-gradient(ellipse 40% 50% at 30% 60%, rgba(133,131,138,.16), transparent 70%), radial-gradient(ellipse 35% 45% at 75% 50%, rgba(133,131,138,.12), transparent 70%)"></div></div>' +
       '<div class="plx" style="--d:.8"><svg class="ruins" viewBox="0 0 1440 300" preserveAspectRatio="xMidYMax slice" style="height:' + Math.round(h * .8) + 'px"><path fill="#0B0B0D" fill-rule="evenodd" d="' + ruins(1440, 300, 120, 9, (opts.seed || 7) + 4, 120) + '"/></svg></div>' +
@@ -2049,18 +2050,23 @@
     });
     kickEmbers();
   }
-  function emberNew(st, anywhere) {
-    var gold = Math.random() < .72;
-    return { x: Math.random() * st.w, y: anywhere ? Math.random() * st.h : st.h + 6, vy: -(12 + Math.random() * 34), vx: (Math.random() - .5) * 8,
-      r: .6 + Math.random() * Math.random() * 2.6, ph: Math.random() * 6.28, sw: 6 + Math.random() * 16, life: 0, max: 4 + Math.random() * 7,
-      c: gold ? [227, 190 + Math.random() * 30, 120] : [236, 120 + Math.random() * 40, 60] };
+  /* kinds: 0 ember (rises and sways) · 1 glint (a gold star that twinkles where it is) · 2 bokeh (a large soft light drifting slowly) */
+  function emberNew(st, anywhere, kind) {
+    if (kind == null) { var q = Math.random(); kind = q < .045 ? 1 : q < .13 ? 2 : 0; }
+    var gold = Math.random() < .78;
+    var p = { k: kind, x: Math.random() * st.w, y: anywhere || kind ? Math.random() * st.h : st.h + 6, vy: -(14 + Math.random() * 40), vx: (Math.random() - .5) * 10,
+      r: .7 + Math.random() * Math.random() * 2.8, ph: Math.random() * 6.28, sw: 6 + Math.random() * 18, life: 0, max: 4 + Math.random() * 7,
+      c: gold ? [240, 196 + Math.random() * 30, 128] : [244, 128 + Math.random() * 40, 64] };
+    if (kind === 1) { p.vy = -(2 + Math.random() * 4); p.vx = 0; p.sw = 2; p.r = 1.1 + Math.random() * 1.5; p.max = 2.5 + Math.random() * 3; p.c = [255, 226, 160]; }
+    if (kind === 2) { p.vy = -(3 + Math.random() * 6); p.vx = (Math.random() - .5) * 6; p.sw = 10; p.r = 14 + Math.random() * 26; p.max = 8 + Math.random() * 8; p.c = [214, 172, 104]; }
+    return p;
   }
   function emberSize(st) {
     var r = st.cv.getBoundingClientRect(), dpr = Math.min(window.devicePixelRatio || 1, 1.5);
     if (!r.width) return false;
     if (Math.abs(r.width - st.w) > 1 || Math.abs(r.height - st.h) > 1) {
       st.w = r.width; st.h = r.height; st.cv.width = Math.round(r.width * dpr); st.cv.height = Math.round(r.height * dpr); st.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      var n = Math.round(Math.max(18, Math.min(84, r.width * r.height / 11000)) * (r.width < 600 ? .6 : 1));
+      var n = Math.round(Math.max(22, Math.min(90, r.width * r.height / 10000)) * (r.width < 600 ? .6 : 1));
       st.ps = []; for (var i = 0; i < n; i++) st.ps.push(emberNew(st, true));
     }
     return true;
@@ -2077,9 +2083,23 @@
         p.life += dt; p.ph += dt * 1.6;
         p.x += (p.vx + Math.sin(p.ph) * p.sw) * dt; p.y += p.vy * dt;
         if (p.life > p.max || p.y < -10 || p.x < -20 || p.x > st.w + 20) { st.ps[i] = emberNew(st, false); return; }
-        var fade = Math.min(1, p.life / .8) * Math.min(1, (p.max - p.life) / 1.6) * (.65 + .35 * Math.sin(p.ph * 3.1)), c = p.c;
-        g.fillStyle = "rgba(" + c[0] + "," + (c[1] | 0) + "," + c[2] + "," + (.11 * fade).toFixed(3) + ")"; g.beginPath(); g.arc(p.x, p.y, p.r * 4, 0, 6.283); g.fill();
-        g.fillStyle = "rgba(" + c[0] + "," + (c[1] | 0) + "," + c[2] + "," + (.95 * fade).toFixed(3) + ")"; g.beginPath(); g.arc(p.x, p.y, p.r, 0, 6.283); g.fill();
+        var c = p.c, rgb = "rgba(" + c[0] + "," + (c[1] | 0) + "," + c[2] + ",";
+        if (p.k === 2) {   /* bokeh */
+          var fb = Math.min(1, p.life / 2) * Math.min(1, (p.max - p.life) / 2.5) * .07, gr = g.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.r);
+          gr.addColorStop(0, rgb + fb.toFixed(3) + ")"); gr.addColorStop(.7, rgb + (fb * .45).toFixed(3) + ")"); gr.addColorStop(1, rgb + "0)");
+          g.fillStyle = gr; g.beginPath(); g.arc(p.x, p.y, p.r, 0, 6.283); g.fill(); return;
+        }
+        if (p.k === 1) {   /* glint: a four-pointed star that swells and fades */
+          var tw = Math.sin(Math.min(1, p.life / p.max) * Math.PI), L = p.r * (2 + 3.6 * tw), a = .85 * tw;
+          g.strokeStyle = rgb + a.toFixed(3) + ")"; g.lineWidth = .8; g.beginPath(); g.moveTo(p.x - L, p.y); g.lineTo(p.x + L, p.y); g.moveTo(p.x, p.y - L * 1.3); g.lineTo(p.x, p.y + L * 1.3); g.stroke();
+          g.strokeStyle = rgb + (a * .45).toFixed(3) + ")"; g.beginPath(); g.moveTo(p.x - L * .45, p.y - L * .45); g.lineTo(p.x + L * .45, p.y + L * .45); g.moveTo(p.x + L * .45, p.y - L * .45); g.lineTo(p.x - L * .45, p.y + L * .45); g.stroke();
+          g.fillStyle = rgb + (.16 * tw).toFixed(3) + ")"; g.beginPath(); g.arc(p.x, p.y, L * .9, 0, 6.283); g.fill();
+          g.fillStyle = "rgba(255,248,230," + a.toFixed(3) + ")"; g.beginPath(); g.arc(p.x, p.y, p.r * .7, 0, 6.283); g.fill(); return;
+        }
+        var fade = Math.min(1, p.life / .8) * Math.min(1, (p.max - p.life) / 1.6) * (.65 + .35 * Math.sin(p.ph * 3.1));
+        if (p.r > 1.8) { g.strokeStyle = rgb + (.22 * fade).toFixed(3) + ")"; g.lineWidth = p.r * .8; g.beginPath(); g.moveTo(p.x, p.y); g.lineTo(p.x - p.vx * .12, p.y - p.vy * .12); g.stroke(); }   /* a short trail */
+        g.fillStyle = rgb + (.12 * fade).toFixed(3) + ")"; g.beginPath(); g.arc(p.x, p.y, p.r * 4.5, 0, 6.283); g.fill();
+        g.fillStyle = rgb + (.95 * fade).toFixed(3) + ")"; g.beginPath(); g.arc(p.x, p.y, p.r, 0, 6.283); g.fill();
       });
     });
     if (any && !document.hidden) FX.raf = requestAnimationFrame(stepEmbers);
@@ -2101,13 +2121,16 @@
   function veilGo(draw) {
     var v = document.getElementById("veil-wipe");
     if (FX.reduce || !v || !document.getElementById("curtain") || !document.getElementById("curtain").classList.contains("done")) { draw(); return; }
-    clearTimeout(FX.vt1); clearTimeout(FX.vt2);
+    clearTimeout(FX.vt1); clearTimeout(FX.vt2); clearTimeout(FX.vt3);
     v.className = "veil-wipe in";
     FX.vt1 = setTimeout(function () {
       draw();
-      v.className = "veil-wipe out";
-      FX.vt2 = setTimeout(function () { v.className = "veil-wipe"; }, 520);
-    }, 280);
+      v.className = "veil-wipe in hold";
+      FX.vt2 = setTimeout(function () {
+        v.className = "veil-wipe out";
+        FX.vt3 = setTimeout(function () { v.className = "veil-wipe"; }, 620);
+      }, 180);
+    }, 360);
   }
 
   /* ---------------- layout ---------------- */
