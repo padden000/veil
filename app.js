@@ -184,6 +184,8 @@
       '<section class="section" style="background:linear-gradient(180deg,#09090B,#111114 40%,#09090B)"><div class="wrap">' + secHead("02", "HEROES", "よく使われているヒーロー", "", '<a class="link" href="#champions">図鑑をすべて見る' + IC.arrow + "</a>") +
       '<div class="grid g4">' + featured.map(function (c) { return champCard(c); }).join("") + "</div></div></section>" +
 
+      (function () { var ad = adSlot("home-interlude", "wide"); return ad ? '<section class="band ad-band"><div class="wrap">' + ad + "</div></section>" : ""; })() +
+
       '<section class="section" aria-label="よく当たる対面"><div class="wrap">' + secHead("03", "MATCHUP LAB", "よく当たる対面 — 記録が多い組み合わせ", "", '<a class="link" href="#matchup">対面を検索する' + IC.arrow + "</a>") +
       '<div class="grid g3">' + topPairs(3).map(muCard).join("") + "</div></div></section>" +
 
@@ -325,6 +327,8 @@
       '<div class="block" ' + P("sec-skins") + '><h2>SKINS <small>スキン</small></h2>' + skins + "</div>" +
 
       '<div class="block" ' + P("sec-faq") + '><h2>FAQ <small>よくある質問</small></h2><div class="faq">' + faq + "</div></div>" +
+
+      adSlot("champion-data", "box") +
 
       '<div class="byline"><span class="portrait sm" style="color:var(--gold)">' + LOGO + '</span><div style="display:flex;flex-direction:column;gap:2px"><span class="mono muted" style="font-size:10px">執筆・監修</span><span class="mincho" style="font-size:16px">' + esc(window.VEIL_EXTRA.author.name) + '</span><span class="muted" style="font-size:12px">' + esc(window.VEIL_EXTRA.author.note) + "</span></div></div></div>" +
 
@@ -1481,6 +1485,29 @@
       '<nav class="nav" id="main-nav" aria-label="メインナビゲーション">' + NAV.map(function (n) { return '<a href="#' + n[0] + '"' + (cur === n[0] ? ' aria-current="page"' : "") + ">" + n[1] + "</a>"; }).join("") + "</nav>" +
       '<div class="head-tools">' + accountBtn(cur) + '<a class="icon-btn' + (cur === "roulette" ? " on" : "") + '" href="#roulette" aria-label="ヒーロールーレット" title="ヒーロールーレット">' + IC.dice + '</a><button class="icon-btn" type="button" data-action="open-search" aria-label="サイト内検索">' + IC.search + '</button><button class="icon-btn menu-btn" type="button" data-action="menu" aria-label="メニューを開く" aria-expanded="false" aria-controls="main-nav">' + IC.menu + "</button></div></div></header>";
   }
+  /* ---------------- ad slots (ads.js) ----------------
+     Shown only when ads.js has a client id and a slot id for this place; ?adpreview shows empty frames to check the layout. */
+  var ADS = window.VEIL_ADS || {}, AD_PREVIEW = /[?&]adpreview\b/.test(location.search), adsLoaded = false;
+  var AD_NAMES = { "home-interlude": "A · HOME", "champion-data": "C · HERO" };
+  function adSlot(id, kind) {
+    var unit = ADS.client && ADS.slots && ADS.slots[id];
+    if (!unit && !AD_PREVIEW) return "";
+    var body = unit ? '<ins class="adsbygoogle" style="display:block" data-ad-client="' + esc(ADS.client) + '" data-ad-slot="' + esc(unit) + '" data-ad-format="' + (kind === "wide" ? "horizontal" : "auto") + '" data-full-width-responsive="true"></ins>'
+      : '<span class="mono muted" style="font-size:10px">AD SLOT ' + esc(AD_NAMES[id] || id) + '</span><span class="muted" style="font-size:12px">広告枠(プレビュー)</span>';
+    return '<aside class="adslot ' + (kind || "box") + (unit ? "" : " preview") + '" aria-label="広告"><span class="adslot-label mono">SPONSORED · 広告</span><div class="adslot-body">' + body + "</div></aside>";
+  }
+  function fillAds() {
+    var units = document.querySelectorAll(".adslot ins.adsbygoogle:not([data-adsbygoogle-status])");
+    if (!units.length) return;
+    if (!adsLoaded) {
+      adsLoaded = true;
+      var s = document.createElement("script"); s.async = true; s.crossOrigin = "anonymous";
+      s.src = "https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=" + encodeURIComponent(ADS.client);
+      document.head.appendChild(s);
+    }
+    units.forEach(function () { try { (window.adsbygoogle = window.adsbygoogle || []).push({}); } catch (e) { /* ad blocked or not ready */ } });
+  }
+
   function footer() {
     return '<footer class="site-footer"><div class="wrap top"><div style="display:flex;flex-direction:column;gap:16px"><a class="logo" href="#home">' + LOGO + "<span>VEIL</span></a>" +
       '<p class="disclaimer">本サイトはMoontonとは無関係の非公式ファンサイトです。Mobile Legends: Bang Bang、ヒーロー名、アートワーク等の権利はMoontonに帰属します。勝率などの数値は、VEILに登録されて承認された試合記録から集計しています。</p></div>' +
@@ -1517,6 +1544,7 @@
     app.innerHTML = header(r.nav) + '<main id="view" tabindex="-1">' + r.html + "</main>" + footer();
     if (r.after && dbOn() && AUTH.user) setTimeout(r.after, 0);
     if (dbOn()) routeHeroes().forEach(ensureHero);
+    fillAds();
     if (r.focus) { var el = document.getElementById(r.focus); if (el) setTimeout(function () { el.scrollIntoView({ block: "center" }); }, 60); }
     else if (!keepScroll) window.scrollTo(0, 0);
     var titles = { roulette: "ROULETTE — VEIL", home: "VEIL", champions: "CHAMPIONS — VEIL", equipment: "EQUIPMENT — VEIL", matchup: "MATCHUP LAB — VEIL", lore: "LORE ARCHIVE — VEIL", patch: "PATCH & META — VEIL" };
