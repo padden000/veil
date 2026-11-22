@@ -900,3 +900,12 @@ tr.rv-banned td { background: rgba(113,32,42,.18); }
 @keyframes glintline { 0% { background-position: 0 0, -30% 0; } 60%, 100% { background-position: 0 0, 130% 0; } }
 @media (prefers-reduced-motion: reduce) { .plx, .dbg img { transform: none !important; transition: none; } .embers, .veil-wipe { display: none; } .rays, .phead h1, .dhero h1, .hero h1, .phead::after, .dhero::after { animation: none !important; } }
 .dhero .embers { z-index: 2; }
+/* generative light behind the page headers */
+.gfx { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 0; pointer-events: none; mix-blend-mode: screen;
+  -webkit-mask-image: linear-gradient(90deg, transparent 0%, rgba(0,0,0,.35) 22%, #000 55%), linear-gradient(180deg, #000 70%, transparent 100%); -webkit-mask-composite: source-in;
+  mask-image: linear-gradient(90deg, transparent 0%, rgba(0,0,0,.35) 22%, #000 55%), linear-gradient(180deg, #000 70%, transparent 100%); mask-composite: intersect; }
+.gfx-silk { opacity: .9; }
+.gfx-slime { image-rendering: auto; filter: blur(.6px) saturate(1.2); opacity: .85; }
+.gfx-mandel { transition: opacity .3s; }
+.phead .embers { z-index: 1; }
+@media (prefers-reduced-motion: reduce) { .gfx { display: none; } }
