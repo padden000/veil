@@ -159,3 +159,9 @@ update public.settings set value = '50000' where key = 'max_matches';
 - **ログインしたら「redirect」関係のエラーが出る**:手順 4 の Redirect URLs と、手順 3 の Discord の Redirects を見直してください。
 - **プロジェクトが止まった(Paused)**:Supabase の画面から **Restore** で戻せます。1 週間だれも使わないと止まり、止まる前にメールが届きます。
 - **シートを更新したとき**:`make_roster.py` で roster.js を作り直したあと、`db/gen_sql.py` を実行すると `heroes.sql` と `import_sheet.sql` も作り直されます。
+
+## 日ごとの勝率チャート(2026-11-22)
+
+ヒーローページの「統計」に、日ごとの勝率チャートを足しました(左右にスライドして過去の日付を見られます)。
+`db/stats_day.sql` を 1 回貼って実行してください(何回実行しても大丈夫です)。日ごとの集計表 `stats_hero_day` ができ、15 分ごとの集計に加わります。
+実行するまでは、チャートの欄に「日ごとの記録はまだありません」と出るだけで、ほかの表示は変わりません。

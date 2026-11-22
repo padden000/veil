@@ -396,6 +396,7 @@ end $$;
 -- The site reads only these small totals, never the raw matches, so the amount sent per visit
 -- stays about the same however many matches are stored.
 drop materialized view if exists public.stats_hero_lane;
+drop materialized view if exists public.stats_hero_day;
 drop materialized view if exists public.stats_hero;
 create materialized view public.stats_hero as                 -- per hero × lane × rank × month
   select p.hero, p.lane, coalesce(m.rank, '') as rank, to_char(m.played_on, 'YYYY-MM') as month,
@@ -404,6 +405,14 @@ create materialized view public.stats_hero as                 -- per hero × lan
   where m.status = 'approved'
   group by 1, 2, 3, 4;
 create unique index on public.stats_hero (hero, lane, rank, month);
+
+create materialized view public.stats_hero_day as             -- per hero × day (daily chart on hero pages)
+  select p.hero, m.played_on as day,
+         count(*)::int as games, count(*) filter (where (p.side = 'ally') = m.win)::int as wins
+  from public.picks p join public.matches m on m.id = p.match_id
+  where m.status = 'approved'
+  group by 1, 2;
+create unique index on public.stats_hero_day (hero, day);
 
 drop materialized view if exists public.stats_top_pairs;
 drop materialized view if exists public.stats_vs;
@@ -450,12 +459,13 @@ create materialized view public.stats_summary as
   from public.matches where status = 'approved';
 create unique index on public.stats_summary (id);
 
-grant select on public.stats_hero, public.stats_vs, public.stats_mates, public.stats_top_pairs, public.stats_recent_lanes, public.stats_summary to anon, authenticated;
+grant select on public.stats_hero, public.stats_hero_day, public.stats_vs, public.stats_mates, public.stats_top_pairs, public.stats_recent_lanes, public.stats_summary to anon, authenticated;
 
 create or replace function public.refresh_stats() returns void
 language plpgsql security definer set search_path = '' as $$
 begin
   refresh materialized view concurrently public.stats_hero;
+  refresh materialized view concurrently public.stats_hero_day;
   refresh materialized view concurrently public.stats_vs;
   refresh materialized view concurrently public.stats_mates;
   refresh materialized view concurrently public.stats_top_pairs;

@@ -362,15 +362,115 @@
      or, for matches with no mark, the ally in their usual lane (see MY PAGE) */
   function myHeroRec(id) {
     if (dbOn() && AUTH.user && !S.myMatches) loadMyMatches();
-    var out = { setup: meSetUp(), all: { games: 0, wins: 0 }, month: {} };
+    var out = { setup: meSetUp(), all: { games: 0, wins: 0 }, month: {}, day: {} };
     meList().forEach(function (m) {
       var ml = meMyLane(m); if (!ml || m.ally[ml.lane] !== id) return;
       var mo = m.date.slice(0, 7); out.all.games++; if (m.win) out.all.wins++;
       out.month[mo] = out.month[mo] || { games: 0, wins: 0 }; out.month[mo].games++; if (m.win) out.month[mo].wins++;
+      out.day[m.date] = out.day[m.date] || { games: 0, wins: 0 }; out.day[m.date].games++; if (m.win) out.day[m.date].wins++;
     });
     return out;
   }
   var MY_COLOR = "#6E9BD1";
+
+  /* ---------------- daily chart (hero page · STATISTICS) ----------------
+     Every calendar day from the first record to today on one scrolling strip, like a stock chart:
+     bars = games that day (volume), dots = that day's win rate, gold line = 7-day average
+     (wins ÷ games over the last 7 days), blue squares = your own games. Drag or swipe sideways to move. */
+  var DAY_ZOOM = [["1M", "1か月", 30], ["3M", "3か月", 90], ["ALL", "全期間", 0]], DAY_MA = 7, DAY_THIN = 3;
+  function dayData(id) { var h = DBC.h && DBC.h[id]; return h && h.day ? h.day : null; }
+  function dIso(d) { return d.getUTCFullYear() + "-" + ("0" + (d.getUTCMonth() + 1)).slice(-2) + "-" + ("0" + d.getUTCDate()).slice(-2); }
+  function dayChartInner(id) {
+    var rows = dayData(id);
+    if (!rows) return '<div class="slot" style="height:120px"><span class="muted" style="font-size:13px">日ごとの記録を読み込んでいます…</span></div>';
+    if (!rows.length) return '<div class="slot" style="height:120px"><span class="muted" style="font-size:13px">日ごとの記録はまだありません。</span></div>';
+    var z = S.dayZoom || "3M";
+    return '<div class="dchart-head"><div class="legend"><span><i class="me-key" style="background:#B99A68;border-radius:50%"></i>' + DAY_MA + '日平均</span><span><i class="me-key" style="background:#E8E5DF;border-radius:50%;opacity:.7"></i>その日の勝率</span><span><i class="me-key" style="background:#3A4048"></i>試合数</span>' +
+      (myHeroRec(id).all.games ? '<span><i class="me-key" style="background:' + MY_COLOR + '"></i>あなた</span>' : "") + '</div><div class="fgroup" role="group" aria-label="表示する期間">' +
+      DAY_ZOOM.map(function (o) { return '<button type="button" class="chip" data-action="dzoom" data-z="' + o[0] + '" aria-pressed="' + (z === o[0]) + '">' + o[1] + "</button>"; }).join("") + "</div></div>" +
+      '<div class="dchart-frame"><div class="dchart-y" aria-hidden="true"></div><div class="dchart-scroll" tabindex="0" aria-label="日ごとの勝率チャート。左右にスクロールできます"></div><div class="dchart-tip" hidden></div></div>' +
+      '<p class="muted dchart-note">左右にドラッグ(スマホはスワイプ)で過去の日付へ。点にカーソルを当てるかタップすると、その日の数字が出ます。' + DAY_THIN + '試合未満の日は点を薄くしています。</p>';
+  }
+  function mountDayChart(keepPos) {
+    var box = document.getElementById("day-chart"); if (!box) return;
+    var id = box.getAttribute("data-hero"), rows = dayData(id);
+    var sc = box.querySelector(".dchart-scroll"), yax = box.querySelector(".dchart-y"), tip = box.querySelector(".dchart-tip");
+    if (!rows || !rows.length || !sc) return;
+    /* the STATISTICS tab may be hidden now: draw when it gets a width, and again when the width changes */
+    if (!sc._ro && window.ResizeObserver) { sc._ro = new ResizeObserver(function () { if (sc.clientWidth && sc.clientWidth !== sc._w) mountDayChart(true); }); sc._ro.observe(sc); }
+    if (!sc.clientWidth) return;
+    sc._w = sc.clientWidth;
+    var prevRight = keepPos && sc.scrollWidth > sc.clientWidth ? sc.scrollWidth - sc.scrollLeft - sc.clientWidth : 0;
+    /* a continuous calendar from the first record to today */
+    var by = {}; rows.forEach(function (r) { by[r.day] = r; });
+    var first = new Date(rows[0].day + "T00:00:00Z"), today = new Date(dIso(new Date(Date.now() + 9 * 3600e3)) + "T00:00:00Z");
+    var last = new Date(rows[rows.length - 1].day + "T00:00:00Z"); if (last > today) today = last;
+    var days = [];
+    for (var d = new Date(first); d <= today; d.setUTCDate(d.getUTCDate() + 1)) days.push(dIso(d));
+    var my = myHeroRec(id).day;
+    var pts = days.map(function (k, i) {
+      var r = by[k], g = 0, w = 0;
+      for (var j = Math.max(0, i - DAY_MA + 1); j <= i; j++) { var q = by[days[j]]; if (q) { g += q.games; w += q.wins; } }
+      return { k: k, g: r ? r.games : 0, w: r ? r.wins : 0, mg: g, mw: w, my: my[k] || null };
+    });
+    var z = S.dayZoom || "3M", span = (DAY_ZOOM.filter(function (o) { return o[0] === z; })[0] || DAY_ZOOM[1])[2];
+    var view = sc.clientWidth, T = 16, PH = 150, VB = 46, VT = T + PH + 22, AX = VT + VB + 22, H = AX + 6;
+    var dw = span ? view / span : view / days.length; dw = Math.max(dw, 2);
+    var W = Math.max(view, Math.ceil(dw * days.length));
+    var X = function (i) { return (i + .5) * dw; }, Y = function (v) { return T + (100 - v) / 100 * PH; };
+    var maxG = Math.max.apply(null, pts.map(function (p) { return p.g; }).concat([1]));
+    var s = "";
+    [0, 50, 100].forEach(function (v) { s += '<line x1="0" x2="' + W + '" y1="' + Y(v) + '" y2="' + Y(v) + '" stroke="' + (v === 50 ? "#65717D" : "#202026") + '"' + (v === 50 ? ' stroke-dasharray="2 4"' : "") + "/>"; });
+    s += '<line x1="0" x2="' + W + '" y1="' + (VT + VB) + '" y2="' + (VT + VB) + '" stroke="#202026"/>';
+    /* date ticks: month starts, plus Mondays when there is room */
+    pts.forEach(function (p, i) {
+      var dt0 = new Date(p.k + "T00:00:00Z"), dd = dt0.getUTCDate(), mon = dt0.getUTCDay() === 1;
+      var left = new Date(Date.UTC(dt0.getUTCFullYear(), dt0.getUTCMonth() + 1, 0)).getUTCDate() - dd;   /* days left in the month */
+      if (dd === 1) s += '<line x1="' + (i * dw) + '" x2="' + (i * dw) + '" y1="' + T + '" y2="' + (VT + VB) + '" stroke="#26262C"/><text x="' + (i * dw + 4) + '" y="' + (AX - 2) + '" fill="#B4B1AA" font-size="11">' + Number(p.k.slice(5, 7)) + "月</text>";
+      else if (mon && dw >= 5 && dd > 3 && left > 1) s += '<text x="' + X(i) + '" y="' + (AX - 2) + '" text-anchor="middle" fill="#65636A" font-size="10">' + dd + "</text>";
+    });
+    /* volume */
+    var bw = Math.max(1, Math.min(dw * .62, 14));
+    pts.forEach(function (p, i) { if (p.g) { var h = Math.max(2, p.g / maxG * VB); s += '<rect x="' + (X(i) - bw / 2).toFixed(1) + '" y="' + (VT + VB - h).toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + h.toFixed(1) + '" fill="#3A4048"/>'; } });
+    /* 7-day average */
+    var line = "", pen = false;
+    pts.forEach(function (p, i) { if (!p.mg) { pen = false; return; } line += (pen ? "L" : "M") + X(i).toFixed(1) + " " + Y(p.mw / p.mg * 100).toFixed(1); pen = true; });
+    s += '<path d="' + line + '" fill="none" stroke="#B99A68" stroke-width="2" stroke-linejoin="round"/>';
+    /* the day's own win rate, and yours */
+    var r0 = Math.max(1.6, Math.min(dw * .22, 3.6));
+    pts.forEach(function (p, i) {
+      if (p.g) s += '<circle cx="' + X(i).toFixed(1) + '" cy="' + Y(p.w / p.g * 100).toFixed(1) + '" r="' + r0.toFixed(1) + '" fill="#E8E5DF" opacity="' + (p.g < DAY_THIN ? ".25" : ".7") + '"/>';
+      if (p.my) { var a = Math.max(4, r0 * 2.2); s += '<rect x="' + (X(i) - a / 2).toFixed(1) + '" y="' + (Y(p.my.wins / p.my.games * 100) - a / 2).toFixed(1) + '" width="' + a.toFixed(1) + '" height="' + a.toFixed(1) + '" fill="' + MY_COLOR + '" stroke="#111114" stroke-width="1.5"/>'; }
+    });
+    s += '<line class="dchart-cross" x1="0" x2="0" y1="' + T + '" y2="' + (VT + VB) + '" stroke="#B99A68" stroke-opacity=".5" visibility="hidden"/>';
+    sc.innerHTML = '<svg width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="日ごとの勝率と試合数">' + s + "</svg>";
+    yax.innerHTML = [100, 50, 0].map(function (v) { return '<span style="top:' + (Y(v) - 7) + 'px">' + v + "%</span>"; }).join("") + '<span style="top:' + (VT - 4) + 'px">' + maxG + "試合</span>";
+    sc.scrollLeft = keepPos ? sc.scrollWidth - sc.clientWidth - prevRight : sc.scrollWidth;
+    /* crosshair + numbers for the day under the pointer */
+    var cross = sc.querySelector(".dchart-cross");
+    function show(clientX) {
+      var rect = sc.getBoundingClientRect(), x = clientX - rect.left + sc.scrollLeft, i = Math.max(0, Math.min(pts.length - 1, Math.floor(x / dw))), p = pts[i];
+      cross.setAttribute("x1", X(i)); cross.setAttribute("x2", X(i)); cross.setAttribute("visibility", "visible");
+      var dt = new Date(p.k + "T00:00:00Z");
+      tip.innerHTML = '<b class="num">' + p.k.replace(/-/g, ".") + " (" + "日月火水木金土".charAt(dt.getUTCDay()) + ")</b>" +
+        (p.g ? "<span>" + p.g + "試合 " + p.w + "勝 · 勝率 " + pct(p.w / p.g * 100) + "</span>" : '<span class="muted">試合なし</span>') +
+        (p.mg ? '<span class="gold">' + DAY_MA + "日平均 " + pct(p.mw / p.mg * 100) + " (" + p.mg + "試合)</span>" : "") +
+        (p.my ? '<span style="color:' + MY_COLOR + '">あなた ' + p.my.games + "試合 " + p.my.wins + "勝</span>" : "");
+      tip.hidden = false;
+      var left = X(i) - sc.scrollLeft + sc.offsetLeft, tw = tip.offsetWidth, fw = box.querySelector(".dchart-frame").clientWidth;
+      tip.style.left = Math.max(4, Math.min(fw - tw - 4, left + 12 + tw > fw ? left - tw - 12 : left + 12)) + "px";
+    }
+    function hide() { cross.setAttribute("visibility", "hidden"); tip.hidden = true; }
+    var drag = null;
+    sc.onpointerdown = function (e) { if (e.pointerType === "mouse") { drag = { x: e.clientX, s: sc.scrollLeft, moved: false }; sc.setPointerCapture(e.pointerId); } else show(e.clientX); };
+    sc.onpointermove = function (e) {
+      if (drag) { var dx = e.clientX - drag.x; if (Math.abs(dx) > 3) drag.moved = true; sc.scrollLeft = drag.s - dx; sc.classList.add("grabbing"); hide(); return; }
+      if (e.pointerType === "mouse") show(e.clientX);
+    };
+    sc.onpointerup = function (e) { if (drag && !drag.moved) show(e.clientX); drag = null; sc.classList.remove("grabbing"); };
+    sc.onpointerleave = function (e) { if (!drag && e.pointerType === "mouse") hide(); };
+    sc.onscroll = function () { if (!drag && !tip.hidden && sc.matches(":hover") === false) hide(); };
+  }
   function statsBox(c) {
     var ST = (window.VEIL_STATS || {})[c.id];
     if (!ST || !ST.all.games) return '<p class="muted" style="font-size:14px">まだ記録した試合に登場していません。</p>';
@@ -411,6 +511,7 @@
     var rankRows = Object.keys(ST.rank).map(function (k) { var x = ST.rank[k]; return "<tr><td>" + esc(k) + '</td><td class="num">' + x.games + '</td><td class="num">' + pct(x.wins / x.games * 100) + "</td></tr>"; }).join("");
     return '<p class="sample-note"><span class="badge">VEIL集計</span>記録した ' + (window.VEIL_MATCH_INFO || {}).count + " 試合のうち、" + c.games + " 試合分の数字です。</p>" +
       '<h3 class="subh" style="margin:0">月ごとの勝率</h3>' + myNote + chart +
+      (dbOn() ? '<h3 class="subh">日ごとの勝率</h3><div class="dchart" id="day-chart" data-hero="' + c.id + '">' + dayChartInner(c.id) + "</div>" : "") +
       '<h3 class="subh">レーンごとの成績</h3><div class="table-box"><table class="data" style="min-width:420px"><thead><tr><th>レーン</th><th>試合数</th><th>勝率</th><th>シートの適正</th></tr></thead><tbody>' + laneRows + "</tbody></table></div>" +
       '<h3 class="subh">ランク帯ごとの成績</h3><div class="table-box"><table class="data" style="min-width:360px"><thead><tr><th>ランク帯</th><th>試合数</th><th>勝率</th></tr></thead><tbody>' + rankRows + "</tbody></table></div>";
   }
@@ -964,13 +1065,14 @@
   }
   /* matchups and teammates of one hero, loaded when a page needs them */
   function ensureHero(id) {
-    if (!SB || !DBC.g || !id || !CH[id] || DBC.h[id] || DBC.loading[id]) return;
+    if (!SB || !DBC.g || !id || !CH[id] || (DBC.h[id] && DBC.h[id].day) || DBC.loading[id]) return;
     DBC.loading[id] = 1;
     Promise.all([
       fetchAll("stats_vs", "lane,opp,games,wins", ["lane", "opp"], { hero: id }),
-      fetchAll("stats_mates", "lane,mate,games,wins", ["lane", "mate"], { hero: id })
+      fetchAll("stats_mates", "lane,mate,games,wins", ["lane", "mate"], { hero: id }),
+      fetchAll("stats_hero_day", "day,games,wins", ["day"], { hero: id }).catch(function () { return []; })   /* stats_day.sql not run yet */
     ]).then(function (x) {
-      DBC.h[id] = { vs: x[0], mates: x[1] }; delete DBC.loading[id];
+      DBC.h[id] = { vs: x[0], mates: x[1], day: x[2] }; delete DBC.loading[id];
       window.VEIL_APPLY_HERO(id, x[0], x[1]); dbCacheSave();
       if (routeHeroes().indexOf(id) >= 0) softRender();
     }).catch(function () { delete DBC.loading[id]; });
@@ -1545,6 +1647,7 @@
     if (r.after && dbOn() && AUTH.user) setTimeout(r.after, 0);
     if (dbOn()) routeHeroes().forEach(ensureHero);
     fillAds();
+    mountDayChart(keepScroll);
     if (r.focus) { var el = document.getElementById(r.focus); if (el) setTimeout(function () { el.scrollIntoView({ block: "center" }); }, 60); }
     else if (!keepScroll) window.scrollTo(0, 0);
     var titles = { roulette: "ROULETTE — VEIL", home: "VEIL", champions: "CHAMPIONS — VEIL", equipment: "EQUIPMENT — VEIL", matchup: "MATCHUP LAB — VEIL", lore: "LORE ARCHIVE — VEIL", patch: "PATCH & META — VEIL" };
@@ -1557,6 +1660,11 @@
     var t = ev.target.closest("[data-action]");
     if (!t) { var a = ev.target.closest('a[href^="#"]'); if (a) { var nav = document.getElementById("main-nav"); if (nav) nav.classList.remove("open"); } return; }
     var act = t.getAttribute("data-action");
+    if (act === "dzoom") {
+      S.dayZoom = t.getAttribute("data-z");
+      var dc = document.getElementById("day-chart"); if (dc) { dc.innerHTML = dayChartInner(dc.getAttribute("data-hero")); mountDayChart(false); }
+      return;
+    }
     if (act === "artnext") { var aid = t.getAttribute("data-id"), pn = artPool(CH[aid]).length; S.artSel = S.artSel || {}; S.artSel[aid] = ((S.artSel[aid] || 0) + 1) % pn;
       var A2 = artOf(CH[aid]), pos2 = A2.pos || "50% 30%";
       document.querySelectorAll(".dbg img, .dbody-art").forEach(function (im) { im.src = A2.img; im.style.objectPosition = pos2; });
