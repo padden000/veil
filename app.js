@@ -373,89 +373,116 @@
   }
   var MY_COLOR = "#6E9BD1";
 
-  /* ---------------- daily chart (hero page · STATISTICS) ----------------
-     Every calendar day from the first record to today on one scrolling strip, like a stock chart:
-     bars = games that day (volume), dots = that day's win rate, gold line = 7-day average
-     (wins ÷ games over the last 7 days), blue squares = your own games. Drag or swipe sideways to move. */
-  var DAY_ZOOM = [["1M", "1か月", 30], ["3M", "3か月", 90], ["ALL", "全期間", 0]], DAY_MA = 7, DAY_THIN = 3;
+  /* ---------------- scrolling charts (hero page · MY PAGE) ----------------
+     One strip with every day (or month) on it, like a stock chart: drag or swipe sideways to go back in time.
+     bars = games (volume), dots = that day's / month's win rate, gold line = the spec's line
+     (ma: 7-day average · cum: running total from the start · point: the month's own rate), blue = your own games.
+     A view registers a spec function by id with schartBox(); render() mounts every chart on the page. */
+  var SCH = {}, DAY_MA = 7, DAY_THIN = 3;
+  var DAY_ZOOM = [["1M", "1か月", 30], ["3M", "3か月", 90], ["ALL", "全期間", 0]];
   function dayData(id) { var h = DBC.h && DBC.h[id]; return h && h.day ? h.day : null; }
   function dIso(d) { return d.getUTCFullYear() + "-" + ("0" + (d.getUTCMonth() + 1)).slice(-2) + "-" + ("0" + d.getUTCDate()).slice(-2); }
-  function dayChartInner(id) {
-    var rows = dayData(id);
-    if (!rows) return '<div class="slot" style="height:120px"><span class="muted" style="font-size:13px">日ごとの記録を読み込んでいます…</span></div>';
-    if (!rows.length) return '<div class="slot" style="height:120px"><span class="muted" style="font-size:13px">日ごとの記録はまだありません。</span></div>';
-    var z = S.dayZoom || "3M";
-    return '<div class="dchart-head"><div class="legend"><span><i class="me-key" style="background:#B99A68;border-radius:50%"></i>' + DAY_MA + '日平均</span><span><i class="me-key" style="background:#E8E5DF;border-radius:50%;opacity:.7"></i>その日の勝率</span><span><i class="me-key" style="background:#3A4048"></i>試合数</span>' +
-      (myHeroRec(id).all.games ? '<span><i class="me-key" style="background:' + MY_COLOR + '"></i>あなた</span>' : "") + '</div><div class="fgroup" role="group" aria-label="表示する期間">' +
-      DAY_ZOOM.map(function (o) { return '<button type="button" class="chip" data-action="dzoom" data-z="' + o[0] + '" aria-pressed="' + (z === o[0]) + '">' + o[1] + "</button>"; }).join("") + "</div></div>" +
-      '<div class="dchart-frame"><div class="dchart-y" aria-hidden="true"></div><div class="dchart-scroll" tabindex="0" aria-label="日ごとの勝率チャート。左右にスクロールできます"></div><div class="dchart-tip" hidden></div></div>' +
-      '<p class="muted dchart-note">左右にドラッグ(スマホはスワイプ)で過去の日付へ。点にカーソルを当てるかタップすると、その日の数字が出ます。' + DAY_THIN + '試合未満の日は点を薄くしています。</p>';
+  function jstToday() { return dIso(new Date(Date.now() + 9 * 3600e3)); }
+  function schKeys(unit, a, b) {
+    var out = [], d = new Date((unit === "month" ? a + "-01" : a) + "T00:00:00Z"), e = new Date((unit === "month" ? b + "-01" : b) + "T00:00:00Z");
+    for (var n = 0; d <= e && n < 4000; n++) { out.push(unit === "month" ? dIso(d).slice(0, 7) : dIso(d)); if (unit === "month") d.setUTCMonth(d.getUTCMonth() + 1); else d.setUTCDate(d.getUTCDate() + 1); }
+    return out;
   }
-  function mountDayChart(keepPos) {
-    var box = document.getElementById("day-chart"); if (!box) return;
-    var id = box.getAttribute("data-hero"), rows = dayData(id);
+  function schartBox(cid, specFn) { SCH[cid] = specFn; return '<div class="dchart schart" data-cid="' + cid + '">' + schartInner(cid) + "</div>"; }
+  function schartInner(cid) {
+    var sp = SCH[cid] && SCH[cid]();
+    if (!sp) return "";
+    if (sp.loading) return '<div class="slot" style="height:120px"><span class="muted" style="font-size:13px">' + sp.loading + "</span></div>";
+    var head = (sp.pick || "") + (!sp.rows.length ? "" : '<div class="dchart-head"><div class="legend">' + sp.legend.map(function (l) { return '<span><i class="me-key" style="' + l[1] + '"></i>' + l[0] + "</span>"; }).join("") + "</div>" +
+      (sp.zooms ? '<div class="fgroup" role="group" aria-label="表示する期間">' + sp.zooms.map(function (o) { return '<button type="button" class="chip" data-action="szoom" data-cid="' + cid + '" data-z="' + o[0] + '" aria-pressed="' + (schZoom(cid, sp) === o[0]) + '">' + o[1] + "</button>"; }).join("") + "</div>" : "") + "</div>");
+    if (!sp.rows.length) return head + '<div class="slot" style="height:120px"><span class="muted" style="font-size:13px">' + (sp.empty || "記録はまだありません。") + "</span></div>";
+    return head + '<div class="dchart-frame"><div class="dchart-y" aria-hidden="true"></div><div class="dchart-scroll" tabindex="0" aria-label="' + esc(sp.label) + '。左右にスクロールできます"></div><div class="dchart-tip" hidden></div></div>' +
+      (sp.note ? '<p class="muted dchart-note">' + sp.note + "</p>" : "");
+  }
+  function schZoom(cid, sp) { S.schZoom = S.schZoom || {}; return S.schZoom[cid] || sp.defZoom || (sp.zooms ? sp.zooms[0][0] : ""); }
+  function schRedraw(cid) { var b = document.querySelector('.schart[data-cid="' + cid + '"]'); if (b) { b.innerHTML = schartInner(cid); mountChart(b, false); } }
+  function mountCharts(keepPos) { document.querySelectorAll(".schart").forEach(function (b) { mountChart(b, keepPos); }); }
+  function mountChart(box, keepPos) {
+    var cid = box.getAttribute("data-cid"), sp = SCH[cid] && SCH[cid]();
     var sc = box.querySelector(".dchart-scroll"), yax = box.querySelector(".dchart-y"), tip = box.querySelector(".dchart-tip");
-    if (!rows || !rows.length || !sc) return;
-    /* the STATISTICS tab may be hidden now: draw when it gets a width, and again when the width changes */
-    if (!sc._ro && window.ResizeObserver) { sc._ro = new ResizeObserver(function () { if (sc.clientWidth && sc.clientWidth !== sc._w) mountDayChart(true); }); sc._ro.observe(sc); }
+    if (!sp || sp.loading || !sp.rows.length || !sc) return;
+    /* a hidden tab has no width yet: draw when it gets one, and again when the width changes */
+    if (!sc._ro && window.ResizeObserver) { sc._ro = new ResizeObserver(function () { if (sc.clientWidth && sc.clientWidth !== sc._w) mountChart(box, true); }); sc._ro.observe(sc); }
     if (!sc.clientWidth) return;
     sc._w = sc.clientWidth;
     var prevRight = keepPos && sc.scrollWidth > sc.clientWidth ? sc.scrollWidth - sc.scrollLeft - sc.clientWidth : 0;
-    /* a continuous calendar from the first record to today */
-    var by = {}; rows.forEach(function (r) { by[r.day] = r; });
-    var first = new Date(rows[0].day + "T00:00:00Z"), today = new Date(dIso(new Date(Date.now() + 9 * 3600e3)) + "T00:00:00Z");
-    var last = new Date(rows[rows.length - 1].day + "T00:00:00Z"); if (last > today) today = last;
-    var days = [];
-    for (var d = new Date(first); d <= today; d.setUTCDate(d.getUTCDate() + 1)) days.push(dIso(d));
-    var my = myHeroRec(id).day;
-    var pts = days.map(function (k, i) {
-      var r = by[k], g = 0, w = 0;
-      for (var j = Math.max(0, i - DAY_MA + 1); j <= i; j++) { var q = by[days[j]]; if (q) { g += q.games; w += q.wins; } }
-      return { k: k, g: r ? r.games : 0, w: r ? r.wins : 0, mg: g, mw: w, my: my[k] || null };
+    var month = sp.unit === "month", by = {}; sp.rows.forEach(function (r) { by[r.k] = r; });
+    var keys = schKeys(sp.unit, sp.start, sp.end), my = sp.my || {}, cg = 0, cw = 0;
+    var pts = keys.map(function (k, i) {
+      var r = by[k], g = r ? r.g : 0, w = r ? r.w : 0, lg = 0, lw = 0;
+      if (sp.line === "ma") { for (var j = Math.max(0, i - DAY_MA + 1); j <= i; j++) { var q = by[keys[j]]; if (q) { lg += q.g; lw += q.w; } } }
+      else if (sp.line === "cum") { cg += g; cw += w; lg = cg; lw = cw; }
+      else { lg = g; lw = w; }
+      return { k: k, g: g, w: w, lg: lg, lw: lw, my: my[k] || null };
     });
-    var z = S.dayZoom || "3M", span = (DAY_ZOOM.filter(function (o) { return o[0] === z; })[0] || DAY_ZOOM[1])[2];
-    var view = sc.clientWidth, T = 16, PH = 150, VB = 46, VT = T + PH + 22, AX = VT + VB + 22, H = AX + 6;
-    var dw = span ? view / span : view / days.length; dw = Math.max(dw, 2);
-    var W = Math.max(view, Math.ceil(dw * days.length));
+    var view = sc.clientWidth, z = schZoom(cid, sp);
+    var cnt = sp.zooms ? ((sp.zooms.filter(function (o) { return o[0] === z; })[0] || sp.zooms[0])[2] || pts.length) : Math.min(pts.length, sp.span ? sp.span[view < 560 ? 0 : 1] : pts.length);   /* span: [phone, wide] */
+    var T = 18, PH = 150, VB = 46, VT = T + PH + 22, AX = VT + VB + 22, H = AX + 6;
+    var dw = Math.max(view / Math.max(cnt, 1), 2), W = Math.max(view, Math.ceil(dw * pts.length));
+    if (pts.length * dw < view) dw = view / pts.length;
     var X = function (i) { return (i + .5) * dw; }, Y = function (v) { return T + (100 - v) / 100 * PH; };
     var maxG = Math.max.apply(null, pts.map(function (p) { return p.g; }).concat([1]));
     var s = "";
     [0, 50, 100].forEach(function (v) { s += '<line x1="0" x2="' + W + '" y1="' + Y(v) + '" y2="' + Y(v) + '" stroke="' + (v === 50 ? "#65717D" : "#202026") + '"' + (v === 50 ? ' stroke-dasharray="2 4"' : "") + "/>"; });
     s += '<line x1="0" x2="' + W + '" y1="' + (VT + VB) + '" y2="' + (VT + VB) + '" stroke="#202026"/>';
-    /* date ticks: month starts, plus Mondays when there is room */
+    /* axis: months (and the year in January) for month charts; month starts and Mondays for day charts */
     pts.forEach(function (p, i) {
-      var dt0 = new Date(p.k + "T00:00:00Z"), dd = dt0.getUTCDate(), mon = dt0.getUTCDay() === 1;
-      var left = new Date(Date.UTC(dt0.getUTCFullYear(), dt0.getUTCMonth() + 1, 0)).getUTCDate() - dd;   /* days left in the month */
+      if (month) {
+        var mo = Number(p.k.slice(5, 7));
+        s += '<text x="' + X(i) + '" y="' + (AX - 2) + '" text-anchor="middle" fill="' + (mo === 1 ? "#E8E5DF" : "#B4B1AA") + '" font-size="11">' + (mo === 1 || i === 0 ? p.k.slice(0, 4) + "." : "") + mo + "月</text>";
+        return;
+      }
+      var dt0 = new Date(p.k + "T00:00:00Z"), dd = dt0.getUTCDate(), left = new Date(Date.UTC(dt0.getUTCFullYear(), dt0.getUTCMonth() + 1, 0)).getUTCDate() - dd;
       if (dd === 1) s += '<line x1="' + (i * dw) + '" x2="' + (i * dw) + '" y1="' + T + '" y2="' + (VT + VB) + '" stroke="#26262C"/><text x="' + (i * dw + 4) + '" y="' + (AX - 2) + '" fill="#B4B1AA" font-size="11">' + Number(p.k.slice(5, 7)) + "月</text>";
-      else if (mon && dw >= 5 && dd > 3 && left > 1) s += '<text x="' + X(i) + '" y="' + (AX - 2) + '" text-anchor="middle" fill="#65636A" font-size="10">' + dd + "</text>";
+      else if (dt0.getUTCDay() === 1 && dw >= 5 && dd > 3 && left > 1) s += '<text x="' + X(i) + '" y="' + (AX - 2) + '" text-anchor="middle" fill="#65636A" font-size="10">' + dd + "</text>";
     });
-    /* volume */
-    var bw = Math.max(1, Math.min(dw * .62, 14));
+    var bw = Math.max(1, Math.min(dw * .62, month ? 26 : 14));
     pts.forEach(function (p, i) { if (p.g) { var h = Math.max(2, p.g / maxG * VB); s += '<rect x="' + (X(i) - bw / 2).toFixed(1) + '" y="' + (VT + VB - h).toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + h.toFixed(1) + '" fill="#3A4048"/>'; } });
-    /* 7-day average */
-    var line = "", pen = false;
-    pts.forEach(function (p, i) { if (!p.mg) { pen = false; return; } line += (pen ? "L" : "M") + X(i).toFixed(1) + " " + Y(p.mw / p.mg * 100).toFixed(1); pen = true; });
-    s += '<path d="' + line + '" fill="none" stroke="#B99A68" stroke-width="2" stroke-linejoin="round"/>';
-    /* the day's own win rate, and yours */
-    var r0 = Math.max(1.6, Math.min(dw * .22, 3.6));
+    /* the gold line; for month charts empty months are bridged with a faint dashed segment */
+    var line = "", bridge = "", pen = false, lastI = -1;
     pts.forEach(function (p, i) {
-      if (p.g) s += '<circle cx="' + X(i).toFixed(1) + '" cy="' + Y(p.w / p.g * 100).toFixed(1) + '" r="' + r0.toFixed(1) + '" fill="#E8E5DF" opacity="' + (p.g < DAY_THIN ? ".25" : ".7") + '"/>';
-      if (p.my) { var a = Math.max(4, r0 * 2.2); s += '<rect x="' + (X(i) - a / 2).toFixed(1) + '" y="' + (Y(p.my.wins / p.my.games * 100) - a / 2).toFixed(1) + '" width="' + a.toFixed(1) + '" height="' + a.toFixed(1) + '" fill="' + MY_COLOR + '" stroke="#111114" stroke-width="1.5"/>'; }
+      if (!p.lg) { pen = false; return; }
+      var x = X(i).toFixed(1), y = Y(p.lw / p.lg * 100).toFixed(1);
+      if (!pen && lastI >= 0 && sp.line === "point") bridge += "M" + X(lastI).toFixed(1) + " " + Y(pts[lastI].lw / pts[lastI].lg * 100).toFixed(1) + "L" + x + " " + y;
+      line += (pen ? "L" : "M") + x + " " + y; pen = true; lastI = i;
+    });
+    if (bridge) s += '<path d="' + bridge + '" fill="none" stroke="#B99A68" stroke-opacity=".45" stroke-width="1.5" stroke-dasharray="3 5"/>';
+    s += '<path d="' + line + '" fill="none" stroke="#B99A68" stroke-width="2" stroke-linejoin="round"/>';
+    /* your own line on month charts */
+    if (month && sp.my) {
+      var ml = "", mpen = false;
+      pts.forEach(function (p, i) { if (!p.my) { mpen = false; return; } ml += (mpen ? "L" : "M") + X(i).toFixed(1) + " " + Y(p.my.wins / p.my.games * 100).toFixed(1); mpen = true; });
+      s += '<path d="' + ml + '" fill="none" stroke="' + MY_COLOR + '" stroke-width="2" stroke-dasharray="6 4"/>';
+    }
+    var r0 = month ? 4 : Math.max(1.6, Math.min(dw * .22, 3.6)), thin = month ? 5 : DAY_THIN;
+    pts.forEach(function (p, i) {
+      var x = X(i), wr = p.g ? p.w / p.g * 100 : null, mwr = p.my ? p.my.wins / p.my.games * 100 : null, myAbove = mwr != null && wr != null && mwr > wr;
+      if (p.g) s += '<circle cx="' + x.toFixed(1) + '" cy="' + Y(wr).toFixed(1) + '" r="' + r0 + '" fill="' + (month ? "#B99A68" : "#E8E5DF") + '"' + (month ? ' stroke="#111114" stroke-width="2"' : "") + ' opacity="' + (p.g < thin ? (month ? ".5" : ".25") : (month ? "1" : ".7")) + '"/>';
+      if (month && p.g && dw >= 46) s += '<text x="' + x.toFixed(1) + '" y="' + (Y(wr) + (myAbove ? 18 : -10)).toFixed(1) + '" text-anchor="middle" fill="#E8E5DF" font-size="11">' + Math.round(wr) + "% (" + p.g + ")</text>";
+      if (p.my) {
+        var a = month ? 9 : Math.max(4, r0 * 2.2), my2 = Y(mwr);
+        s += '<rect x="' + (x - a / 2).toFixed(1) + '" y="' + (my2 - a / 2).toFixed(1) + '" width="' + a.toFixed(1) + '" height="' + a.toFixed(1) + '" fill="' + MY_COLOR + '" stroke="#111114" stroke-width="1.5"/>';
+        if (month && dw >= 46) s += '<text x="' + x.toFixed(1) + '" y="' + (Math.abs(mwr - wr) < 0.5 ? Y(wr) + 18 : my2 + (myAbove ? -10 : 18)).toFixed(1) + '" text-anchor="middle" fill="' + MY_COLOR + '" font-size="11">' + (Math.abs(mwr - wr) < 0.5 ? "あなたも " : "") + Math.round(mwr) + "% (" + p.my.games + ")</text>";
+      }
     });
     s += '<line class="dchart-cross" x1="0" x2="0" y1="' + T + '" y2="' + (VT + VB) + '" stroke="#B99A68" stroke-opacity=".5" visibility="hidden"/>';
-    sc.innerHTML = '<svg width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="日ごとの勝率と試合数">' + s + "</svg>";
+    sc.innerHTML = '<svg width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="' + esc(sp.label) + '">' + s + "</svg>";
     yax.innerHTML = [100, 50, 0].map(function (v) { return '<span style="top:' + (Y(v) - 7) + 'px">' + v + "%</span>"; }).join("") + '<span style="top:' + (VT - 4) + 'px">' + maxG + "試合</span>";
     sc.scrollLeft = keepPos ? sc.scrollWidth - sc.clientWidth - prevRight : sc.scrollWidth;
-    /* crosshair + numbers for the day under the pointer */
     var cross = sc.querySelector(".dchart-cross");
     function show(clientX) {
       var rect = sc.getBoundingClientRect(), x = clientX - rect.left + sc.scrollLeft, i = Math.max(0, Math.min(pts.length - 1, Math.floor(x / dw))), p = pts[i];
       cross.setAttribute("x1", X(i)); cross.setAttribute("x2", X(i)); cross.setAttribute("visibility", "visible");
-      var dt = new Date(p.k + "T00:00:00Z");
-      tip.innerHTML = '<b class="num">' + p.k.replace(/-/g, ".") + " (" + "日月火水木金土".charAt(dt.getUTCDay()) + ")</b>" +
+      var head = month ? p.k.slice(0, 4) + "年" + Number(p.k.slice(5)) + "月" : p.k.replace(/-/g, ".") + " (" + "日月火水木金土".charAt(new Date(p.k + "T00:00:00Z").getUTCDay()) + ")";
+      tip.innerHTML = '<b class="num">' + head + "</b>" +
         (p.g ? "<span>" + p.g + "試合 " + p.w + "勝 · 勝率 " + pct(p.w / p.g * 100) + "</span>" : '<span class="muted">試合なし</span>') +
-        (p.mg ? '<span class="gold">' + DAY_MA + "日平均 " + pct(p.mw / p.mg * 100) + " (" + p.mg + "試合)</span>" : "") +
-        (p.my ? '<span style="color:' + MY_COLOR + '">あなた ' + p.my.games + "試合 " + p.my.wins + "勝</span>" : "");
+        (sp.line !== "point" && p.lg ? '<span class="gold">' + sp.lineName + " " + pct(p.lw / p.lg * 100) + " (" + p.lg + "試合)</span>" : "") +
+        (p.my ? '<span style="color:' + MY_COLOR + '">あなた ' + p.my.games + "試合 " + p.my.wins + "勝 · " + pct(p.my.wins / p.my.games * 100) + "</span>" : "");
       tip.hidden = false;
       var left = X(i) - sc.scrollLeft + sc.offsetLeft, tw = tip.offsetWidth, fw = box.querySelector(".dchart-frame").clientWidth;
       tip.style.left = Math.max(4, Math.min(fw - tw - 4, left + 12 + tw > fw ? left - tw - 12 : left + 12)) + "px";
@@ -469,7 +496,23 @@
     };
     sc.onpointerup = function (e) { if (drag && !drag.moved) show(e.clientX); drag = null; sc.classList.remove("grabbing"); };
     sc.onpointerleave = function (e) { if (!drag && e.pointerType === "mouse") hide(); };
-    sc.onscroll = function () { if (!drag && !tip.hidden && sc.matches(":hover") === false) hide(); };
+  }
+  var SCH_NOTE = "左右にドラッグ(スマホはスワイプ)で過去へ。カーソルを当てるかタップすると、その日の数字が出ます。", SCH_NOTE_M = "左右にドラッグ(スマホはスワイプ)で前の月へ。カーソルを当てるかタップすると、その月の数字が出ます。";
+  /* chart specs */
+  function heroMonthSpec(c, ST, MY) {
+    var ks = Object.keys(ST.month).sort(), now = jstToday().slice(0, 7);
+    return { unit: "month", start: ks[0], end: ks[ks.length - 1] > now ? ks[ks.length - 1] : now, rows: ks.map(function (k) { return { k: k, g: ST.month[k].games, w: ST.month[k].wins }; }),
+      my: MY.all.games ? MY.month : null, line: "point", span: [4, 8], label: "月ごとの勝率の推移",
+      legend: [["全体(両チーム)", "background:#B99A68;border-radius:50%"]].concat(MY.all.games ? [["あなた(点線)", "background:" + MY_COLOR]] : []).concat([["試合数", "background:#3A4048"]]),
+      note: "数字は「勝率(試合数)」。全体は5試合未満の月を薄くしています。記録のない月は細い点線でつないでいます。" + SCH_NOTE_M };
+  }
+  function heroDaySpec(c, MY) {
+    var rows = dayData(c.id);
+    if (!rows) return { loading: "日ごとの記録を読み込んでいます…" };
+    return { unit: "day", start: rows.length ? rows[0].day : "", end: jstToday(), rows: rows.map(function (r) { return { k: r.day, g: r.games, w: r.wins }; }),
+      my: MY.all.games ? MY.day : null, line: "ma", lineName: DAY_MA + "日平均", zooms: DAY_ZOOM, defZoom: "3M", label: "日ごとの勝率と試合数", empty: "日ごとの記録はまだありません。",
+      legend: [[DAY_MA + "日平均", "background:#B99A68;border-radius:50%"], ["その日の勝率", "background:#E8E5DF;border-radius:50%;opacity:.7"], ["試合数", "background:#3A4048"]].concat(MY.all.games ? [["あなた", "background:" + MY_COLOR]] : []),
+      note: SCH_NOTE + DAY_THIN + "試合未満の日は点を薄くしています。" };
   }
   function statsBox(c) {
     var ST = (window.VEIL_STATS || {})[c.id];
@@ -480,38 +523,11 @@
       : !MY.setup ? '<p class="me-note">あなたの成績も重ねて表示できます。<a href="#me">マイページ</a>の「記録」タブで試合ごとに自分のヒーローを選ぶか、「英雄」タブで「いつものレーン」を選んでください。</p>'
       : !mine ? '<p class="me-note">あなたが ' + esc(c.name) + ' を使った記録はまだありません。<a href="#me">マイページで設定を見る</a></p>'
       : '<p class="me-note"><i class="me-key" style="background:' + MY_COLOR + '"></i>あなた: ' + MY.all.games + "試合 " + MY.all.wins + "勝 · 勝率 " + pct(MY.all.wins / MY.all.games * 100) + " — 全体 " + pct(ST.all.wins / ST.all.games * 100) + (MY.all.games >= ME_MIN ? "より " + mePt(MY.all.wins / MY.all.games * 100 - ST.all.wins / ST.all.games * 100) : '<span class="tag dim me-thin">データ不足</span>') + "</p>";
-    var chart;
-    if (months.length < 2) {
-      var r0 = ST.month[months[0]], m0 = MY.month[months[0]];
-      chart = '<div class="chart-box"><div class="slot" style="height:160px"><span class="mono muted" style="font-size:10px">勝率の推移</span><span class="muted" style="font-size:13px">記録が ' + md(months[0]) + " の1か月分だけなので、推移はまだ描けません(全体 " + r0.games + "試合 · " + pct(r0.wins / r0.games * 100) + (m0 ? " / あなた " + m0.games + "試合 · " + pct(m0.wins / m0.games * 100) : "") + ")。</span></div></div>";
-    } else {
-      var pts = months.map(function (m) { var y = MY.month[m]; return { m: m, wr: ST.month[m].wins / ST.month[m].games * 100, games: ST.month[m].games, my: y ? y.wins / y.games * 100 : null, myg: y ? y.games : 0 }; });
-      var W = 660, H = 230, L = 44, Rr = 20, T = 22, Bm = 40, lo = 0, hi = 100;
-      var X = function (i) { return L + (pts.length === 1 ? 0 : i * (W - L - Rr) / (pts.length - 1)); }, Yp = function (v) { return T + (hi - v) / (hi - lo) * (H - T - Bm); };
-      var grid = [0, 50, 100].map(function (t) { return '<line x1="' + L + '" x2="' + (W - Rr) + '" y1="' + Yp(t) + '" y2="' + Yp(t) + '" stroke="' + (t === 50 ? "#65717D" : "#202026") + '"' + (t === 50 ? ' stroke-dasharray="2 4"' : "") + '/><text x="' + (L - 8) + '" y="' + (Yp(t) + 4) + '" text-anchor="end" fill="#85838A" font-size="11">' + t + "%</text>"; }).join("");
-      var line = pts.map(function (p, i) { return (i ? "L" : "M") + X(i).toFixed(1) + " " + Yp(p.wr).toFixed(1); }).join(" ");
-      /* my line: only through months with games; gaps break the line */
-      var myLine = "", pen = false;
-      pts.forEach(function (p, i) { if (p.my == null) { pen = false; return; } myLine += (pen ? "L" : "M") + X(i).toFixed(1) + " " + Yp(p.my).toFixed(1); pen = true; });
-      var anchor = function (i) { return i === 0 ? "start" : i === pts.length - 1 ? "end" : "middle"; };
-      var dots = pts.map(function (p, i) {
-        var thin = p.games < 5, myAbove = p.my != null && p.my > p.wr;
-        var s = '<circle cx="' + X(i).toFixed(1) + '" cy="' + Yp(p.wr).toFixed(1) + '" r="4" fill="#B99A68" stroke="#111114" stroke-width="2"' + (thin ? ' opacity=".5"' : "") + '><title>' + md(p.m) + " 全体 勝率 " + p.wr.toFixed(1) + "% · " + p.games + "試合</title></circle>" +
-          '<text x="' + X(i).toFixed(1) + '" y="' + (H - 14) + '" text-anchor="' + anchor(i) + '" fill="#85838A" font-size="11">' + md(p.m) + "</text>" +
-          '<text x="' + X(i).toFixed(1) + '" y="' + (Yp(p.wr) + (myAbove ? 18 : -10)).toFixed(1) + '" text-anchor="' + anchor(i) + '" fill="#E8E5DF" font-size="11">' + Math.round(p.wr) + "% (" + p.games + ")</text>";
-        if (p.my != null) s += '<rect x="' + (X(i) - 4.5).toFixed(1) + '" y="' + (Yp(p.my) - 4.5).toFixed(1) + '" width="9" height="9" fill="' + MY_COLOR + '" stroke="#111114" stroke-width="2"' + (p.myg < 3 ? ' opacity=".5"' : "") + '><title>' + md(p.m) + " あなた 勝率 " + p.my.toFixed(1) + "% · " + p.myg + "試合</title></rect>" +
-          '<text x="' + X(i).toFixed(1) + '" y="' + (Yp(p.my) + (myAbove ? -10 : 18)).toFixed(1) + '" text-anchor="' + anchor(i) + '" fill="#B4B1AA" font-size="11">' + Math.round(p.my) + "% (" + p.myg + ")</text>";
-        return s;
-      }).join("");
-      chart = '<div class="chart-box"><svg viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="月ごとの勝率の推移' + (mine ? "(全体とあなた)" : "") + '" style="width:100%;height:auto">' + grid +
-        '<path d="' + line + '" fill="none" stroke="#B99A68" stroke-width="2"/>' + (mine ? '<path d="' + myLine + '" fill="none" stroke="' + MY_COLOR + '" stroke-width="2" stroke-dasharray="6 4"/>' : "") + dots + "</svg>" +
-        '<div class="legend">' + (mine ? '<span><i class="me-key" style="background:#B99A68;border-radius:50%"></i>全体(両チーム)</span><span><i class="me-key" style="background:' + MY_COLOR + '"></i>あなた(点線)</span>' : "") + "<span>数字は「勝率(試合数)」。全体は5試合未満、あなたは3試合未満の月を薄くしています。</span></div></div>";
-    }
     var laneRows = D.roles.map(function (r) { var x = ST.lane[r.id]; return x ? "<tr><td>" + r.label + '</td><td class="num">' + x.games + '</td><td class="num">' + pct(x.wins / x.games * 100) + "</td><td>" + (c.sheetLanes && c.sheetLanes[r.id] ? c.sheetLanes[r.id] : "—") + "</td></tr>" : ""; }).join("");
     var rankRows = Object.keys(ST.rank).map(function (k) { var x = ST.rank[k]; return "<tr><td>" + esc(k) + '</td><td class="num">' + x.games + '</td><td class="num">' + pct(x.wins / x.games * 100) + "</td></tr>"; }).join("");
     return '<p class="sample-note"><span class="badge">VEIL集計</span>記録した ' + (window.VEIL_MATCH_INFO || {}).count + " 試合のうち、" + c.games + " 試合分の数字です。</p>" +
-      '<h3 class="subh" style="margin:0">月ごとの勝率</h3>' + myNote + chart +
-      (dbOn() ? '<h3 class="subh">日ごとの勝率</h3><div class="dchart" id="day-chart" data-hero="' + c.id + '">' + dayChartInner(c.id) + "</div>" : "") +
+      '<h3 class="subh" style="margin:0">月ごとの勝率</h3>' + myNote + schartBox("hero-month", function () { return heroMonthSpec(c, ST, MY); }) +
+      (dbOn() ? '<h3 class="subh">日ごとの勝率</h3>' + schartBox("hero-day", function () { return heroDaySpec(c, myHeroRec(c.id)); }) : "") +
       '<h3 class="subh">レーンごとの成績</h3><div class="table-box"><table class="data" style="min-width:420px"><thead><tr><th>レーン</th><th>試合数</th><th>勝率</th><th>シートの適正</th></tr></thead><tbody>' + laneRows + "</tbody></table></div>" +
       '<h3 class="subh">ランク帯ごとの成績</h3><div class="table-box"><table class="data" style="min-width:360px"><thead><tr><th>ランク帯</th><th>試合数</th><th>勝率</th></tr></thead><tbody>' + rankRows + "</tbody></table></div>";
   }
@@ -856,25 +872,34 @@
     M.forEach(function (m) { if (m.win === last) run++; else { run = 1; last = m.win; } if (m.win) best.w = Math.max(best.w, run); else best.l = Math.max(best.l, run); });
     return { cur: run, curWin: last, bestW: best.w, bestL: best.l };
   }
+  /* TREND on MY PAGE: your win rate by month, and day by day through one season (running total from its first game) */
   function meTrend(M) {
-    if (M.length < 2) return "";
-    var W = 680, H = 220, L = 44, R = 16, T = 14, B = 34, w = 0, SKIP = M.length > ME_TREND_SKIP + 2 ? ME_TREND_SKIP : 0;
-    var pts = M.map(function (m, i) { if (m.win) w++; return { n: i, m: m, wr: w / (i + 1) * 100 }; }).slice(SKIP);
-    pts.forEach(function (p, i) { p.i = i; });
-    var shown = M.slice(SKIP);
-    var X = function (i) { return L + i * (W - L - R) / (pts.length - 1); }, Y = function (v) { return T + (100 - v) / 100 * (H - T - B); };
-    var grid = [0, 50, 100].map(function (t) { return '<line x1="' + L + '" x2="' + (W - R) + '" y1="' + Y(t) + '" y2="' + Y(t) + '" stroke="' + (t === 50 ? "#65717D" : "#202026") + '"' + (t === 50 ? ' stroke-dasharray="2 4"' : "") + '/><text x="' + (L - 8) + '" y="' + (Y(t) + 4) + '" text-anchor="end" fill="#85838A" font-size="11">' + t + "%</text>"; }).join("");
-    var seen = {}, ticks = pts.filter(function (p) { var mo = p.m.date.slice(0, 7); if (seen[mo]) return false; seen[mo] = 1; return true; })
-      .map(function (p) { return '<line x1="' + X(p.i) + '" x2="' + X(p.i) + '" y1="' + (H - B) + '" y2="' + (H - B + 5) + '" stroke="#303037"/><text x="' + X(p.i) + '" y="' + (H - 12) + '" text-anchor="start" fill="#85838A" font-size="11">' + Number(p.m.date.slice(5, 7)) + "/" + Number(p.m.date.slice(8)) + "</text>"; }).join("");
-    var line = pts.map(function (p, i) { return (i ? "L" : "M") + X(i).toFixed(1) + " " + Y(p.wr).toFixed(1); }).join(" ");
-    var lastP = pts[pts.length - 1];
-    var hits = pts.map(function (p) { return '<rect x="' + (X(p.i) - (W - L - R) / pts.length / 2).toFixed(1) + '" y="' + T + '" width="' + ((W - L - R) / pts.length).toFixed(1) + '" height="' + (H - T - B) + '" fill="transparent"><title>' + (p.n + 1) + "試合目 · " + p.m.date.slice(5).replace("-", "/") + " · " + (p.m.win ? "勝ち" : "負け") + " · 累計勝率 " + p.wr.toFixed(1) + "%</title></rect>"; }).join("");
-    var strip = shown.map(function (m, i) { return '<i class="' + (m.win ? "w" : "l") + '" title="' + (i + SKIP + 1) + "試合目 " + m.date.slice(5).replace("-", "/") + " " + (m.win ? "勝ち" : "負け") + '"></i>'; }).join("");
-    return '<div class="chart-box"><svg viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="試合ごとの累計勝率の推移" style="width:100%;height:auto">' + grid + ticks +
-      '<path d="' + line + '" fill="none" stroke="#B99A68" stroke-width="2"/><circle cx="' + X(lastP.i).toFixed(1) + '" cy="' + Y(lastP.wr).toFixed(1) + '" r="4" fill="#B99A68" stroke="#111114" stroke-width="2"/>' +
-      '<text x="' + (X(lastP.i) - 8).toFixed(1) + '" y="' + (Y(lastP.wr) - 10).toFixed(1) + '" text-anchor="end" fill="#E8E5DF" font-size="12">' + lastP.wr.toFixed(1) + "%</text>" + hits + "</svg>" +
-      '<div class="me-strip" style="padding:0 ' + (R / W * 100).toFixed(2) + "% 0 " + (L / W * 100).toFixed(2) + '%" aria-label="試合ごとの勝ち負け(古い順)">' + strip + "</div>" +
-      '<div class="legend">' + "<span>線は1試合目からの累計勝率、点線は平均の50%。下の帯は1試合ずつの結果(古い順)。" + (SKIP ? "最初の" + SKIP + "試合は試合数が少なく勝率が大きくぶれるので、" + (SKIP + 1) + "試合目から表示しています(勝率の計算には含めています)。" : "") + "</span>" + '<span><i class="me-key w"></i>勝ち</span><span><i class="me-key l"></i>負け</span></div></div>';
+    if (!M.length) return "";
+    var byMo = {}, seas = {};
+    M.forEach(function (m) {
+      var k = m.date.slice(0, 7); (byMo[k] = byMo[k] || { k: k, g: 0, w: 0 }).g++; if (m.win) byMo[k].w++;
+      var s = m.season || "—"; (seas[s] = seas[s] || []).push(m);
+    });
+    var mks = Object.keys(byMo).sort(), now = jstToday();
+    var sl = Object.keys(seas).sort(function (a, b) { return seas[a][0].date < seas[b][0].date ? -1 : seas[a][0].date > seas[b][0].date ? 1 : 0; });
+    function monthSpec() {
+      return { unit: "month", start: mks[0], end: mks[mks.length - 1] > now.slice(0, 7) ? mks[mks.length - 1] : now.slice(0, 7), rows: mks.map(function (k) { return byMo[k]; }),
+        line: "point", span: [4, 8], label: "あなたの月ごとの勝率",
+        legend: [["月の勝率", "background:#B99A68;border-radius:50%"], ["試合数", "background:#3A4048"]],
+        note: "数字は「勝率(試合数)」。5試合未満の月は薄くしています。記録のない月は細い点線でつないでいます。" + SCH_NOTE_M };
+    }
+    function seasonSpec() {
+      var cur = sl.indexOf(S.meSeason) >= 0 ? S.meSeason : sl[sl.length - 1], list = seas[cur], byD = {};
+      list.forEach(function (m) { (byD[m.date] = byD[m.date] || { k: m.date, g: 0, w: 0 }).g++; if (m.win) byD[m.date].w++; });
+      var dks = Object.keys(byD).sort(), last = dks[dks.length - 1], latest = cur === sl[sl.length - 1];
+      return { unit: "day", start: dks[0], end: latest && now > last ? now : last, rows: dks.map(function (k) { return byD[k]; }),
+        line: "cum", lineName: "シーズン累計", zooms: [["1M", "1か月", 30], ["ALL", "シーズン全体", 0]], defZoom: "ALL", label: (cur === "—" ? "シーズン未設定" : cur) + " の日ごとの勝率",
+        pick: sl.length > 1 || sl[0] !== "—" ? '<div class="fgroup" role="group" aria-label="シーズンを選ぶ">' + sl.map(function (s) { return '<button type="button" class="chip" data-action="mseason" data-s="' + esc(s) + '" aria-pressed="' + (s === cur) + '">' + (s === "—" ? "シーズン未設定" : esc(s)) + "</button>"; }).join("") + "</div>" : "",
+        legend: [["シーズン累計の勝率", "background:#B99A68;border-radius:50%"], ["その日の勝率", "background:#E8E5DF;border-radius:50%;opacity:.7"], ["試合数", "background:#3A4048"]],
+        note: "金の線は、そのシーズンの最初の試合からの累計勝率です。" + SCH_NOTE };
+    }
+    return '<h3 class="subh" style="margin:0 0 12px">月ごとの勝率</h3>' + schartBox("me-month", monthSpec) +
+      '<h3 class="subh" style="margin:28px 0 12px">シーズンごとの推移(日ごと)</h3>' + schartBox("me-season", seasonSpec);
   }
   function meTable(head, rows) { return '<div class="table-box"><table class="data me-table"><thead><tr>' + head.map(function (h) { return "<th>" + h + "</th>"; }).join("") + "</tr></thead><tbody>" + rows.join("") + "</tbody></table></div>"; }
   function meGroupRows(groups, all) {
@@ -1092,7 +1117,7 @@
       S.myLoading = false;
       if (res.error) { S.myMatches = []; return; }
       S.myMatches = (res.data || []).filter(function (r) { return r.status === "approved"; }).map(function (r) {
-        var m = { id: r.id, k: "d" + r.id, date: String(r.played_on), rank: r.rank, party: r.party, win: r.win, dur: r.duration_sec, ally: {}, enemy: {}, me: r.my_lane || null };
+        var m = { id: r.id, k: "d" + r.id, date: String(r.played_on), season: r.season || "", rank: r.rank, party: r.party, win: r.win, dur: r.duration_sec, ally: {}, enemy: {}, me: r.my_lane || null };
         Object.keys(r.picks || {}).forEach(function (k) { var a = k.split(":"); if (m[a[0]]) m[a[0]][a[1]] = r.picks[k]; });
         (r.detail || []).forEach(function (d) { if (d.items && d.items.length) (m.items = m.items || {})[d.side + ":" + d.lane] = d.items; });
         return m;
@@ -1647,7 +1672,7 @@
     if (r.after && dbOn() && AUTH.user) setTimeout(r.after, 0);
     if (dbOn()) routeHeroes().forEach(ensureHero);
     fillAds();
-    mountDayChart(keepScroll);
+    mountCharts(keepScroll);
     if (r.focus) { var el = document.getElementById(r.focus); if (el) setTimeout(function () { el.scrollIntoView({ block: "center" }); }, 60); }
     else if (!keepScroll) window.scrollTo(0, 0);
     var titles = { roulette: "ROULETTE — VEIL", home: "VEIL", champions: "CHAMPIONS — VEIL", equipment: "EQUIPMENT — VEIL", matchup: "MATCHUP LAB — VEIL", lore: "LORE ARCHIVE — VEIL", patch: "PATCH & META — VEIL" };
@@ -1660,11 +1685,8 @@
     var t = ev.target.closest("[data-action]");
     if (!t) { var a = ev.target.closest('a[href^="#"]'); if (a) { var nav = document.getElementById("main-nav"); if (nav) nav.classList.remove("open"); } return; }
     var act = t.getAttribute("data-action");
-    if (act === "dzoom") {
-      S.dayZoom = t.getAttribute("data-z");
-      var dc = document.getElementById("day-chart"); if (dc) { dc.innerHTML = dayChartInner(dc.getAttribute("data-hero")); mountDayChart(false); }
-      return;
-    }
+    if (act === "szoom") { S.schZoom = S.schZoom || {}; S.schZoom[t.getAttribute("data-cid")] = t.getAttribute("data-z"); schRedraw(t.getAttribute("data-cid")); return; }
+    if (act === "mseason") { S.meSeason = t.getAttribute("data-s"); schRedraw("me-season"); return; }
     if (act === "artnext") { var aid = t.getAttribute("data-id"), pn = artPool(CH[aid]).length; S.artSel = S.artSel || {}; S.artSel[aid] = ((S.artSel[aid] || 0) + 1) % pn;
       var A2 = artOf(CH[aid]), pos2 = A2.pos || "50% 30%";
       document.querySelectorAll(".dbg img, .dbody-art").forEach(function (im) { im.src = A2.img; im.style.objectPosition = pos2; });
