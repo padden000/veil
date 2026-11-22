@@ -864,3 +864,5 @@ tr.rv-banned td { background: rgba(113,32,42,.18); }
 .gt-foot:empty { display: none; }
 .gt-edit { min-height: 28px !important; font-size: 11px; }
 .tcard .gt-editor textarea { font-size: 13px; }
+.mem-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 18px; }
+.mem-tools #mem-q { width: auto; flex: 1 1 220px; max-width: 320px; }
