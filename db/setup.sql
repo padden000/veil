@@ -20,7 +20,7 @@ create table if not exists public.heroes (
 create table if not exists public.profiles (
   id          uuid primary key references auth.users (id) on delete cascade,
   name        text not null default '',
-  role        text not null default 'member' check (role in ('member', 'trusted', 'approver', 'admin')),
+  role        text not null default 'member' check (role in ('member', 'trusted', 'manager', 'admin')),
   created_at  timestamptz not null default now()
 );
 
@@ -165,7 +165,7 @@ begin
 
   sig := public.veil_signature((payload ->> 'played_on')::date, payload -> 'ally', payload -> 'enemy');
   select id into dup from public.matches where signature = sig and status <> 'rejected' order by id limit 1;
-  st := case when r in ('trusted', 'approver', 'admin') and dup is null then 'approved' else 'pending' end;
+  st := case when r in ('trusted', 'manager', 'admin') and dup is null then 'approved' else 'pending' end;
 
   insert into public.matches (submitted_by, status, played_on, season, rank, party, win, duration_sec, note, signature, dup_of,
                               reviewed_by, reviewed_at)
@@ -210,13 +210,13 @@ begin
   if not found then raise exception '取り下げられるのは、自分の承認前の試合だけです'; end if;
 end $$;
 
--- ---------- approvers ----------
+-- ---------- approval (運営 and 管理者) ----------
 create or replace function public.pending_matches(lim int default 100) returns table (
   id bigint, played_on date, rank text, party text, win boolean, duration_sec int, note text,
   submitter text, submitter_role text, dup_of bigint, created_at timestamptz, picks jsonb
 ) language plpgsql stable security definer set search_path = '' as $$
 begin
-  if coalesce(public.my_role(), '') not in ('approver', 'admin') then raise exception '承認する権限がありません'; end if;
+  if coalesce(public.my_role(), '') not in ('manager', 'admin') then raise exception '承認する権限がありません'; end if;
   return query
   select m.id, m.played_on, m.rank, m.party, m.win, m.duration_sec, m.note, pr.name, pr.role, m.dup_of, m.created_at,
          (select jsonb_agg(jsonb_build_object('side', p.side, 'lane', p.lane, 'hero', p.hero, 'me', p.is_me, 'k', p.k, 'd', p.d, 'a', p.a))
@@ -230,7 +230,7 @@ end $$;
 create or replace function public.review_match(match_id bigint, approve boolean, reason text default null) returns void
 language plpgsql security definer set search_path = '' as $$
 begin
-  if coalesce(public.my_role(), '') not in ('approver', 'admin') then raise exception '承認する権限がありません'; end if;
+  if coalesce(public.my_role(), '') not in ('manager', 'admin') then raise exception '承認する権限がありません'; end if;
   update public.matches
      set status = case when approve then 'approved' else 'rejected' end,
          reject_reason = case when approve then null else left(reason, 200) end,
@@ -239,12 +239,17 @@ begin
   if not found then raise exception 'この試合はもう処理されています'; end if;
 end $$;
 
--- ---------- admin: people and roles ----------
+-- ---------- people and roles ----------
+-- roles, low to high:
+--   member   一般          submits; matches wait for approval
+--   trusted  信頼ユーザー  submits; matches count at once (unless a duplicate)
+--   manager  運営          + approves / rejects pending matches, and moves people between member and trusted
+--   admin    管理者        everything, including making managers and admins
 create or replace function public.list_profiles() returns table (
   id uuid, name text, role text, created_at timestamptz, approved bigint, pending bigint
 ) language plpgsql stable security definer set search_path = '' as $$
 begin
-  if coalesce(public.my_role(), '') <> 'admin' then raise exception '管理者だけが使えます'; end if;
+  if coalesce(public.my_role(), '') not in ('manager', 'admin') then raise exception '運営か管理者だけが使えます'; end if;
   return query
   select p.id, p.name, p.role, p.created_at,
          (select count(*) from public.matches m where m.submitted_by = p.id and m.status = 'approved'),
@@ -254,10 +259,16 @@ end $$;
 
 create or replace function public.set_role(target uuid, new_role text) returns void
 language plpgsql security definer set search_path = '' as $$
+declare me text := coalesce(public.my_role(), ''); cur text;
 begin
-  if coalesce(public.my_role(), '') <> 'admin' then raise exception '管理者だけが使えます'; end if;
-  if new_role not in ('member', 'trusted', 'approver', 'admin') then raise exception '役割が正しくありません'; end if;
-  if target = auth.uid() and new_role <> 'admin' then raise exception '自分の管理者権限は外せません'; end if;
+  if me not in ('manager', 'admin') then raise exception '運営か管理者だけが使えます'; end if;
+  if new_role not in ('member', 'trusted', 'manager', 'admin') then raise exception '役割が正しくありません'; end if;
+  select role into cur from public.profiles where id = target;
+  if cur is null then raise exception 'その人が見つかりません'; end if;
+  if target = auth.uid() then raise exception '自分の役割は変えられません'; end if;
+  if me = 'manager' and (cur in ('manager', 'admin') or new_role in ('manager', 'admin')) then
+    raise exception '運営が変えられるのは、一般と信頼ユーザーのあいだだけです';
+  end if;
   update public.profiles set role = new_role where id = target;
 end $$;
 

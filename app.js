@@ -885,14 +885,16 @@
   var AUTH = { ready: false, user: null, role: null, name: "" };
   var RANKS = ["Warrior", "Elite", "Master", "Grandmaster", "Epic", "Legend", "Mythic", "Mythical Honor", "Mythical Glory", "Mythical Immortal"];
   var PARTIES = [["Solo", "ソロ"], ["Duo", "デュオ(2人)"], ["Trio", "トリオ(3人)"], ["5-stack", "5人パーティ"]];
-  var ROLE_JP = { member: "一般", trusted: "信頼ユーザー", approver: "承認係", admin: "管理者" };
+  var ROLE_JP = { member: "一般", trusted: "信頼ユーザー", manager: "運営", admin: "管理者" };
+  var ROLE_LOW = ["member", "trusted"];   /* the roles a manager (運営) may give or take */
   var STATUS_JP = { pending: "承認待ち", approved: "承認済み", rejected: "却下" };
   try {
     if (CFG.supabaseUrl && CFG.supabaseKey && window.supabase && window.supabase.createClient)
       SB = window.supabase.createClient(CFG.supabaseUrl, CFG.supabaseKey, { auth: { flowType: "pkce", detectSessionInUrl: true, persistSession: true, autoRefreshToken: true } });
   } catch (e) { SB = null; }
   function dbOn() { return !!SB; }
-  function canReview() { return AUTH.role === "approver" || AUTH.role === "admin"; }
+  function canReview() { return AUTH.role === "manager" || AUTH.role === "admin"; }
+  function canManage() { return AUTH.role === "manager" || AUTH.role === "admin"; }
   function userName(u) { var m = (u && u.user_metadata) || {}; return m.full_name || m.name || (m.custom_claims && m.custom_claims.global_name) || m.user_name || "プレイヤー"; }
   function dbErr(e) { var m = (e && (e.message || e.error_description)) || String(e || ""); return /Failed to fetch|NetworkError/i.test(m) ? "サーバーにつながりませんでした。通信を確かめて、もう一度試してください。" : m; }
   function setUser(session) {
@@ -938,7 +940,7 @@
     if (!SB) return '<div class="empty"><span class="tag dim">準備中</span><h3>データベースにまだつながっていません</h3><p class="muted" style="font-size:14px;max-width:560px">試合の登録と承認は、Supabaseの準備ができたら使えるようになります。</p></div>';
     if (!AUTH.ready) return '<div class="empty"><span class="tag dim">LOADING</span><h3>ログイン状態を確かめています…</h3></div>';
     if (!AUTH.user) return '<div class="empty"><span class="tag dim">LOGIN</span><h3>Discordでログインしてください</h3><p class="muted" style="font-size:14px;max-width:560px">見るだけならログインはいりません。試合を登録するときだけ、Discordでログインします。パスワードはこのサイトに保存されません。</p><button class="btn primary" type="button" data-action="login">' + IC_DISCORD + "Discordでログイン</button>" + (S.loginErr ? '<p class="sub-msg bad">' + esc(S.loginErr) + "</p>" : "") + "</div>";
-    if (needRole && !needRole()) return '<div class="empty"><span class="tag warn">NO ACCESS</span><h3>このページを見る権限がありません</h3><p class="muted" style="font-size:14px">承認係か管理者だけが使えるページです。</p></div>';
+    if (needRole && !needRole()) return '<div class="empty"><span class="tag warn">NO ACCESS</span><h3>このページを見る権限がありません</h3><p class="muted" style="font-size:14px">運営か管理者だけが使えるページです。</p></div>';
     return "";
   }
 
@@ -948,7 +950,7 @@
     return acctHead("ACCOUNT", "あなたのアカウント", "ACCOUNT") + '<section class="section tight"><div class="wrap" style="display:flex;flex-direction:column;gap:32px">' + (g ||
       '<div class="acct-card"><span class="acct-ini big">' + esc(AUTH.name.slice(0, 1).toUpperCase()) + '</span><div style="display:flex;flex-direction:column;gap:6px"><span class="mincho" style="font-size:24px">' + esc(AUTH.name) + '</span><span class="mono muted" style="font-size:11px">DISCORD · ' + esc(ROLE_JP[AUTH.role] || "—") + "</span></div></div>" +
       '<div class="acct-links"><a class="card acct-link" href="#submit"><span class="mono gold" style="font-size:10px">SUBMIT</span><span class="mincho" style="font-size:20px">試合を登録する</span><span class="muted" style="font-size:13px">' + (AUTH.role === "member" ? "登録した試合は、承認されてから集計に入ります。" : "登録した試合は、すぐ集計に入ります(同じ試合がすでにあるときは承認待ち)。") + "</span></a>" +
-      (canReview() ? '<a class="card acct-link" href="#review"><span class="mono gold" style="font-size:10px">REVIEW</span><span class="mincho" style="font-size:20px">承認する</span><span class="muted" style="font-size:13px">承認待ちの試合を確認します。' + (AUTH.role === "admin" ? "メンバーの役割もここで変えられます。" : "") + "</span></a>" : "") +
+      (canReview() ? '<a class="card acct-link" href="#review"><span class="mono gold" style="font-size:10px">REVIEW</span><span class="mincho" style="font-size:20px">承認する</span><span class="muted" style="font-size:13px">承認待ちの試合を確認します。' + (AUTH.role === "admin" ? "メンバーの役割もここで変えられます。" : AUTH.role === "manager" ? "一般と信頼ユーザーの切り替えもここでできます。" : "") + "</span></a>" : "") +
       '<a class="card acct-link" href="#me"><span class="mono gold" style="font-size:10px">MY PAGE</span><span class="mincho" style="font-size:20px">マイページ</span><span class="muted" style="font-size:13px">自分の勝率や得意ヒーローを見ます。</span></a></div>' +
       '<div><button class="btn ghost" type="button" data-action="logout">ログアウト</button></div>') + "</div></section>";
   }
@@ -996,7 +998,7 @@
         '<fieldset class="sub-res"><legend class="mono">結果(自分のチーム)</legend><label><input type="radio" name="f-win" value="1"><span>WIN 勝ち</span></label><label><input type="radio" name="f-win" value="0"><span>LOSE 負け</span></label></fieldset>' +
         '<div class="sub-teams"><div class="sub-team"><h3 class="subh" style="margin:0">味方 <small class="muted">自分を選んで、自分のKDAは必ず入れてください</small></h3>' + LANE_ORDER.map(function (L) { return subRow("ally", L); }).join("") + "</div>" +
         '<div class="sub-team"><h3 class="subh" style="margin:0">敵 <small class="muted">KDAは分かれば</small></h3>' + LANE_ORDER.map(function (L) { return subRow("enemy", L); }).join("") + "</div></div>" +
-        '<label class="sub-field wide"><span class="mono">メモ(任意 · 承認係に伝えたいこと)</span><input id="f-note" maxlength="300"></label>' +
+        '<label class="sub-field wide"><span class="mono">メモ(任意 · 承認する人に伝えたいこと)</span><input id="f-note" maxlength="300"></label>' +
         '<div class="sub-actions"><button class="btn primary" type="submit" id="sub-send">登録する' + IC.arrow + '</button><span id="sub-msg" class="sub-msg" role="status" aria-live="polite"></span></div>' +
       "</form>" +
       "<div>" + secHead("—", "MY SUBMISSIONS", "あなたが登録した試合") + '<div id="my-subs"><p class="muted">読み込み中…</p></div></div>') + "</div></section>";
@@ -1037,7 +1039,7 @@
       var d = res.data || {};
       S.subLast = { date: r.payload.played_on, rank: r.payload.rank, party: r.payload.party, season: r.payload.season };
       msg.className = "sub-msg ok";
-      msg.textContent = d.status === "approved" ? "登録しました(No." + d.id + ")。集計には15分ほどで反映されます。" : "登録しました(No." + d.id + ")。承認されると集計に入ります。" + (d.dup_of ? "同じ試合(No." + d.dup_of + ")がすでにあるので、承認係が確認します。" : "");
+      msg.textContent = d.status === "approved" ? "登録しました(No." + d.id + ")。集計には15分ほどで反映されます。" : "登録しました(No." + d.id + ")。承認されると集計に入ります。" + (d.dup_of ? "同じ試合(No." + d.dup_of + ")がすでにあるので、運営が確認します。" : "");
       var f = document.getElementById("sub-form");
       f.querySelectorAll(".sub-hero, [data-kda], #f-note, #f-dur").forEach(function (x) { x.value = ""; if (x.classList.contains("sub-hero")) subFace(x); });
       f.querySelectorAll('input[name="f-win"], input[name="f-me"]').forEach(function (x) { x.checked = false; });
@@ -1069,12 +1071,12 @@
     });
   }
 
-  /* ----- review page (approvers) + roles (admin) ----- */
+  /* ----- review page (運営・管理者) + roles ----- */
   function viewReview() {
     var g = acctGate(canReview);
     return acctHead("REVIEW", "承認待ちの試合", "REVIEW") + '<section class="section tight"><div class="wrap" style="display:flex;flex-direction:column;gap:72px">' + (g ||
       "<div>" + secHead("01", "PENDING", "承認待ち") + '<p class="muted" style="font-size:13px;margin-bottom:16px">内容が正しければ承認してください。承認した試合は15分ほどで集計に入ります。同じ試合が二重に登録されたときは、片方を却下してください。</p><div id="rv-list"><p class="muted">読み込み中…</p></div></div>' +
-      (AUTH.role === "admin" ? "<div>" + secHead("02", "MEMBERS", "メンバーと役割") + '<p class="muted" style="font-size:13px;margin-bottom:16px">一般 = 承認が必要 / 信頼ユーザー = すぐ集計に入る / 承認係 = 承認もできる / 管理者 = 役割も変えられる</p><div id="rv-members"><p class="muted">読み込み中…</p></div></div>' : "")) + "</div></section>";
+      (canManage() ? "<div>" + secHead("02", "MEMBERS", "メンバーと役割") + '<p class="muted" style="font-size:13px;margin-bottom:16px">一般 = 承認が必要 / 信頼ユーザー = すぐ集計に入る / 運営 = 承認と、一般・信頼ユーザーの切り替えができる / 管理者 = すべて' + (AUTH.role === "manager" ? "<br>運営が変えられるのは、一般と信頼ユーザーのあいだだけです。" : "") + '</p><div id="rv-members"><p class="muted">読み込み中…</p></div></div>' : "")) + "</div></section>";
   }
   function loadReview() {
     var box = document.getElementById("rv-list"); if (!box || !SB) return;
@@ -1095,7 +1097,11 @@
       if (!document.getElementById("rv-members")) return;
       if (res.error) { mb.innerHTML = '<p class="sub-msg bad">' + esc(dbErr(res.error)) + "</p>"; return; }
       mb.innerHTML = meTable(["名前", "役割", "承認済み", "承認待ち", "登録日"], (res.data || []).map(function (p) {
-        return "<tr><td>" + esc(p.name || "(名前なし)") + (AUTH.user && p.id === AUTH.user.id ? ' <span class="tag dim me-thin">あなた</span>' : "") + '</td><td><select class="rv-role" data-uid="' + p.id + '" aria-label="' + esc(p.name) + ' の役割">' + Object.keys(ROLE_JP).map(function (k) { return '<option value="' + k + '"' + (k === p.role ? " selected" : "") + ">" + ROLE_JP[k] + "</option>"; }).join("") + '</select></td><td class="num">' + p.approved + '</td><td class="num">' + p.pending + '</td><td class="num muted">' + esc(String(p.created_at).slice(0, 10).replace(/-/g, ".")) + "</td></tr>";
+        var self = AUTH.user && p.id === AUTH.user.id, locked = self || (AUTH.role === "manager" && ROLE_LOW.indexOf(p.role) < 0);
+        var opts = AUTH.role === "admin" ? Object.keys(ROLE_JP) : ROLE_LOW;
+        return "<tr><td>" + esc(p.name || "(名前なし)") + (self ? ' <span class="tag dim me-thin">あなた</span>' : "") + "</td><td>" +
+          (locked ? '<span class="muted">' + esc(ROLE_JP[p.role] || p.role) + "</span>" :
+          '<select class="rv-role" data-uid="' + p.id + '" aria-label="' + esc(p.name) + ' の役割">' + opts.map(function (k) { return '<option value="' + k + '"' + (k === p.role ? " selected" : "") + ">" + ROLE_JP[k] + "</option>"; }).join("") + "</select>") + '</td><td class="num">' + p.approved + '</td><td class="num">' + p.pending + '</td><td class="num muted">' + esc(String(p.created_at).slice(0, 10).replace(/-/g, ".")) + "</td></tr>";
       }));
     });
   }
