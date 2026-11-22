@@ -18,8 +18,8 @@
    - Framework preset:**None**
    - Build command:空欄
    - Build output directory:空欄
-5. Project name を `veil` にして **Save and Deploy** を押します。
-6. 表示された URL(例:`https://veil.pages.dev`)を控えます。以下では **サイトURL** と呼びます。
+5. Project name を `veil-jpmeta` にして **Save and Deploy** を押します(作成済み)。
+6. URL は `https://veil-jpmeta.pages.dev` です。以下では **サイトURL** と呼びます。
 
 ## 1. Supabase のプロジェクトを作る
 
@@ -51,9 +51,9 @@
 1. 手順 3 で開いた Supabase の **Discord** の画面で、**Enable** をオンにします。
 2. Client ID と Client Secret を貼って **Save** を押します。
 3. **Authentication** → **URL Configuration** を開いて、次の 2 か所を設定します。
-   - **Site URL**:サイトURL(例:`https://veil.pages.dev`)
+   - **Site URL**:サイトURL(例:`https://veil-jpmeta.pages.dev`)
    - **Redirect URLs** に次を追加します。
-     - `https://veil.pages.dev/**`(サイトURL の後ろに `/**`)
+     - `https://veil-jpmeta.pages.dev/**`(サイトURL の後ろに `/**`)
      - `http://localhost:8765/**`(手元で試すとき用。なくても構いません)
 
 ## 5. 2つの値を Claude に送る
