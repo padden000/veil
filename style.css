@@ -783,7 +783,10 @@ button.mlog-h:focus-visible { outline: 1px solid var(--gold); outline-offset: 1p
 .dchart-note { font-size: 12px; line-height: 1.7; }
 
 /* ---------- approval page: bulk, 要確認, approved list, members, log ---------- */
-.rv-bulk { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; padding: 12px 14px; margin-bottom: 14px; border: 1px solid var(--line); background: var(--bg2); position: sticky; top: 72px; z-index: 5; }
+.rv-bulk { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; padding: 12px 14px; margin-bottom: 14px; border: 1px solid var(--line); background: var(--bg2); position: sticky; top: 134px; z-index: 5; }
+.rv-badge { display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 20px; padding: 0 6px; margin-left: 8px; border-radius: 10px; background: var(--gold); color: #0b0b0d; font-size: 11px; font-weight: 600; vertical-align: 2px; }
+.rv-badge[hidden] { display: none; }
+.dtab2 { position: relative; } .dtab2 .rv-badge { position: absolute; top: 9px; right: 2px; margin: 0; }
 .rv-check { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--mid); cursor: pointer; }
 .rv-check input, .rv-switch input { accent-color: var(--gold); width: 16px; height: 16px; }
 .mlog-info .rv-check { align-self: flex-start; }
@@ -905,7 +908,7 @@ tr.rv-banned td { background: rgba(113,32,42,.18); }
   .menu-btn, .head-tools a.icon-btn[href="#roulette"] { display: none !important; }
   .head-tools { gap: 8px; }
   .head-tools .icon-btn { width: 40px; height: 40px; }
-  .dtabs, .rv-bulk { top: 56px; }
+  .dtabs { top: 56px; } .rv-bulk { top: 118px; }
   .nav { top: 56px; }
   /* the bar */
   .tabbar { display: grid; grid-template-columns: repeat(5, 1fr); position: fixed; left: 0; right: 0; bottom: 0; z-index: 70; padding-bottom: env(safe-area-inset-bottom);
@@ -930,6 +933,18 @@ tr.rv-banned td { background: rgba(113,32,42,.18); }
   body.sheet-open .tabbar a[aria-current="page"]::before { display: none; }
   .tabbar button[aria-expanded="true"]::before { content: ""; position: absolute; top: -1px; left: 26%; right: 26%; height: 2px; background: var(--gold); box-shadow: 0 0 12px rgba(217,185,126,.7); }
   .fsearch input { font-size: 17px; min-height: 54px; }
+  /* staff page: the bulk bar stays in place on phones (sticky would cover half the screen) */
+  .rv-bulk { position: static; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .rv-bulk .rv-check { grid-column: 1; } .rv-bulk #rv-count { grid-column: 2; justify-self: end; align-self: center; }
+  .rv-bulk .rv-why { grid-column: 1 / -1; grid-row: 3; max-width: none; }
+  .rv-bulk .chip { grid-row: 2; justify-content: center; }
+  .rv-bulk .sub-msg { grid-column: 1 / -1; }
+  #mem-table .table-box { overflow-x: auto; }
+  #mem-table table.data.me-table { min-width: 720px; }
+  #mem-table th { white-space: nowrap; }
+  .mem-tools #mem-q { max-width: none; }
+  .mem-tools .fgroup { flex: 1 1 100%; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  .mem-tools .fgroup .chip, .rv-log-kinds .chip { flex: 0 0 auto; white-space: nowrap; }
   /* compact page headers: same text size for reading, less room around it */
   .phead .wrap { padding-top: 22px; padding-bottom: 26px; gap: 12px; }
   .phead .crumbs { display: none; }

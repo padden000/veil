@@ -1766,21 +1766,32 @@
   /* ----- review page (運営・管理者) + roles ----- */
   function viewReview() {
     var g = acctGate(canReview);
-    return acctHead("REVIEW", "承認と運営の作業", "REVIEW") + '<section class="section tight"><div class="wrap" style="display:flex;flex-direction:column;gap:72px">' + (g ||
-      (canManage() ? "<div>" + secHead("00", "SEASON", "今のシーズン") + '<p class="muted" style="font-size:13px;margin-bottom:16px">新しく登録される試合は、このシーズンで記録されます。一般の人や信頼ユーザーは変えられません。シーズンが変わったらここを更新してください。</p>' +
-        '<div class="sub-actions"><label class="sr" for="rv-season">今のシーズン</label><input id="rv-season" class="rv-why" style="max-width:160px" maxlength="4" placeholder="例: S43" value="' + esc(S.curSeason || "") + '"><button class="chip on-gold" type="button" data-action="rv-season">保存する</button><span id="rv-season-msg" class="sub-msg" role="status" aria-live="polite"></span></div></div>' : "") +
-      "<div>" + secHead("01", "PENDING", "承認待ち") + '<p class="muted" style="font-size:13px;margin-bottom:16px">内容が正しければ承認してください。承認した試合は15分ほどで集計に入ります。<br><span class="tag warn rv-flag">要確認</span> が付いた試合は、運営・管理者の <b>2人</b> が同じ判断をしたときに決まります(登録した本人は投票できません)。管理者は1人で確定することもできます。</p>' +
+    if (g) return acctHead("REVIEW", "承認と運営の作業", "REVIEW") + '<section class="section tight"><div class="wrap">' + g + "</div></section>";
+    var tabs = [["rv-t-pending", "承認待ち", "PENDING"], ["rv-t-approved", "承認済み", "APPROVED"]];
+    if (canManage()) tabs.push(["rv-t-members", "メンバー", "MEMBERS"]);
+    tabs.push(["rv-t-log", "作業の記録", "LOG"]);
+    if (canManage()) tabs.push(["rv-t-season", "シーズン", "SEASON"]);
+    var cur = tabs.some(function (x) { return x[0] === S.rvtab; }) ? S.rvtab : "rv-t-pending";
+    var P = function (id) { return 'role="tabpanel" id="' + id + '" aria-labelledby="tab-' + id + '"' + (id === cur ? "" : " hidden"); };
+    return acctHead("REVIEW", "承認と運営の作業", "REVIEW") +
+      '<section class="section tight" style="padding-top:0"><nav class="dtabs" aria-label="運営の作業"><div class="wrap" role="tablist" aria-label="運営の作業">' +
+      tabs.map(function (x) { var on = cur === x[0]; return '<button type="button" class="dtab dtab2" role="tab" id="tab-' + x[0] + '" aria-controls="' + x[0] + '" aria-selected="' + on + '" tabindex="' + (on ? 0 : -1) + '" data-action="tab" data-target="' + x[0] + '"><span class="mono">' + x[2] + "</span>" + x[1] + (x[0] === "rv-t-pending" ? '<b class="rv-badge num" id="rv-badge" hidden></b>' : "") + "</button>"; }).join("") + "</div></nav>" +
+      '<div class="wrap" style="padding-top:40px">' +
+      "<div " + P("rv-t-pending") + ">" + '<p class="muted" style="font-size:13px;margin-bottom:16px">内容が正しければ承認してください。承認した試合は15分ほどで集計に入ります。<br><span class="tag warn rv-flag">要確認</span> が付いた試合は、運営・管理者の <b>2人</b> が同じ判断をしたときに決まります(登録した本人は投票できません)。管理者は1人で確定することもできます。</p>' +
         '<div class="rv-bulk" id="rv-bulk" hidden><label class="rv-check"><input type="checkbox" id="rv-all"> すべて選ぶ</label><span id="rv-count" class="mono muted">0件を選択中</span>' +
         '<button class="chip on-gold" type="button" data-action="rv-bulk-ok">選んだ試合を承認</button><input id="rv-bulk-why" class="rv-why" maxlength="200" placeholder="却下の理由(任意)"><button class="chip" type="button" data-action="rv-bulk-ng">選んだ試合を却下</button><span id="rv-bulk-msg" class="sub-msg" role="status" aria-live="polite"></span></div>' +
         '<div id="rv-list"><p class="muted">読み込み中…</p></div></div>' +
-      "<div>" + secHead("02", "APPROVED", "承認済みの試合") + '<p class="muted" style="font-size:13px;margin-bottom:16px">承認したあとで間違いに気づいたら、ここで直すか取り消してください。直しても登録した人と承認の状態は変わりません。取り消すと、承認待ちに戻すか却下にできます(却下は30日後に消えます)。</p>' +
+      "<div " + P("rv-t-approved") + ">" + '<p class="muted" style="font-size:13px;margin-bottom:16px">承認したあとで間違いに気づいたら、ここで直すか取り消してください。直しても登録した人と承認の状態は変わりません。取り消すと、承認待ちに戻すか却下にできます(却下は30日後に消えます)。</p>' +
         '<form class="rv-search" data-form="rv-search" role="search"><label class="sr" for="rv-q">承認済みの試合を探す</label><input id="rv-q" class="rv-why" placeholder="No.・戦闘番号・登録した人の名前" value="' + esc(S.rvQ || "") + '"><button class="chip" type="submit">探す</button></form>' +
         '<div id="rv-approved"><p class="muted">読み込み中…</p></div></div>' +
-      (canManage() ? "<div>" + secHead("03", "MEMBERS", "メンバーと役割") + '<p class="muted" style="font-size:13px;margin-bottom:16px">一般 = 承認が必要 / 信頼ユーザー = すぐ集計に入る(要確認の試合は除く) / 運営 = 承認と、一般・信頼ユーザーの切り替えができる / 管理者 = すべて' + (AUTH.role === "manager" ? "<br>運営が変えられるのは、一般と信頼ユーザーのあいだだけです。" : "") +
+      (canManage() ? "<div " + P("rv-t-members") + ">" + '<p class="muted" style="font-size:13px;margin-bottom:16px">一般 = 承認が必要 / 信頼ユーザー = すぐ集計に入る(要確認の試合は除く) / 運営 = 承認と、一般・信頼ユーザーの切り替えができる / 管理者 = すべて' + (AUTH.role === "manager" ? "<br>運営が変えられるのは、一般と信頼ユーザーのあいだだけです。" : "") +
         '<br><b>登録停止</b> = ログインして見ることはできるが、試合を登録できない。<b>統計から外す</b> = 試合は残したまま、勝率などの集計に入れない(様子見に)。</p><div id="rv-members"><p class="muted">読み込み中…</p></div></div>' : "") +
-      "<div>" + secHead("04", "LOG", "作業の記録") + '<p class="muted" style="font-size:13px;margin-bottom:16px">運営・管理者がしたことの記録です(1年分)。修正したものは「変更点」を開くと前後が見られます。</p>' +
+      "<div " + P("rv-t-log") + ">" + '<p class="muted" style="font-size:13px;margin-bottom:16px">運営・管理者がしたことの記録です(1年分)。修正したものは「変更点」を開くと前後が見られます。</p>' +
         '<div class="fgroup" role="group" aria-label="記録の種類">' + LOG_KINDS.map(function (k) { return '<button type="button" class="chip" data-action="rv-logf" data-k="' + k[0] + '" aria-pressed="' + ((S.logKind || "all") === k[0]) + '">' + k[1] + "</button>"; }).join("") + "</div>" +
-        '<div id="rv-log" class="rv-log"><p class="muted">読み込み中…</p></div><button class="chip" type="button" data-action="rv-log-more" id="rv-log-more" hidden style="margin-top:16px">もっと見る</button></div>') + "</div></section>";
+        '<div id="rv-log" class="rv-log"><p class="muted">読み込み中…</p></div><button class="chip" type="button" data-action="rv-log-more" id="rv-log-more" hidden style="margin-top:16px">もっと見る</button></div>' +
+      (canManage() ? "<div " + P("rv-t-season") + ">" + '<p class="muted" style="font-size:13px;margin-bottom:16px">新しく登録される試合は、このシーズンで記録されます。一般の人や信頼ユーザーは変えられません。シーズンが変わったらここを更新してください。</p>' +
+        '<div class="sub-actions"><label class="sr" for="rv-season">今のシーズン</label><input id="rv-season" class="rv-why" style="max-width:160px" maxlength="4" placeholder="例: S43" value="' + esc(S.curSeason || "") + '"><button class="chip on-gold" type="button" data-action="rv-season">保存する</button><span id="rv-season-msg" class="sub-msg" role="status" aria-live="polite"></span></div></div>' : "") +
+      "</div></section>";
   }
   var FLAG_JP = { dup: "同じ試合がもうある", kda: "KDAが極端", short: "5分未満の試合", old: "60日以上前の試合", burst: "1時間に20件超の登録" };
   var LOG_KINDS = [["all", "すべて", null], ["review", "承認・却下・投票", ["approve", "reject", "vote_ok", "vote_ng"]], ["fix", "修正・取り消し", ["edit", "unapprove"]],
@@ -1815,6 +1826,7 @@
       if (res.error) { box.innerHTML = '<p class="sub-msg bad">' + esc(/manage\.sql|flags|votes/.test(res.error.message || "") ? "データベースの準備がまだです(db/manage.sql の実行が必要です)。" : dbErr(res.error)) + "</p>"; return; }
       var rows = res.data || [];
       bulk.hidden = !rows.length; rvCount();
+      var bd = document.getElementById("rv-badge"); if (bd) { bd.hidden = !rows.length; bd.textContent = rows.length >= 100 ? "99+" : rows.length; }
       if (!rows.length) { box.innerHTML = '<div class="empty" style="padding:44px 24px"><span class="tag">CLEAR</span><h3>承認待ちの試合はありません</h3></div>'; return; }
       box.innerHTML = '<ol class="mlog">' + rows.map(function (m) {
         var fl = m.flags && m.flags.length;
@@ -2621,7 +2633,7 @@
 
 
   function selectTab(id, focus) {
-    if (id.indexOf("me-") === 0) S.metab = id; else S.dtab = id;
+    if (id.indexOf("me-") === 0) S.metab = id; else if (id.indexOf("rv-t-") === 0) S.rvtab = id; else S.dtab = id;
     document.querySelectorAll(".dtab").forEach(function (b) {
       var on = b.getAttribute("data-target") === id;
       b.setAttribute("aria-selected", String(on)); b.setAttribute("tabindex", on ? "0" : "-1");
@@ -2629,7 +2641,7 @@
     });
     document.querySelectorAll('[role="tabpanel"]').forEach(function (p) { p.hidden = p.id !== id; });
     var bar = document.querySelector(".dtabs");
-    if (bar) { var stuck = bar.getBoundingClientRect().top <= 73; if (stuck) { var y = bar.parentNode.getBoundingClientRect().top + window.scrollY - 72; window.scrollTo(0, y); } }
+    if (bar) { var hh = document.querySelector(".site-header").offsetHeight || 72, stuck = bar.getBoundingClientRect().top <= hh + 1; if (stuck) { var y = bar.parentNode.getBoundingClientRect().top + window.scrollY - hh; window.scrollTo(0, y); } }
   }
   document.addEventListener("keydown", function (e) {
     var t = e.target; if (!t.classList || !t.classList.contains("dtab")) return;
