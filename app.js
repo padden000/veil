@@ -83,11 +83,11 @@
     opts = opts || {};
     var h = opts.h || 360;
     return '<div class="atmo" aria-hidden="true">' +
-      '<div style="position:absolute;inset:0;background:radial-gradient(ellipse 55% 60% at ' + (opts.lx || 70) + '% 25%, rgba(185,154,104,.15), transparent 70%), radial-gradient(ellipse 45% 55% at 5% 100%, rgba(113,32,42,.38), transparent 70%), radial-gradient(ellipse 80% 60% at 50% 0%, rgba(101,113,125,.12), transparent 70%)"></div>' +
-      (opts.far === false ? "" : '<svg class="ruins" viewBox="0 0 1440 460" preserveAspectRatio="xMidYMax slice" style="height:' + Math.round(h * 1.3) + 'px;opacity:.9"><path fill="#141418" fill-rule="evenodd" d="' + ruins(1440, 460, 150, 6, opts.seed || 7, 230) + '"/></svg>') +
-      '<div class="fog" style="bottom:40px;height:' + Math.round(h * .8) + 'px;background:radial-gradient(ellipse 40% 50% at 30% 60%, rgba(133,131,138,.16), transparent 70%), radial-gradient(ellipse 35% 45% at 75% 50%, rgba(133,131,138,.12), transparent 70%)"></div>' +
-      '<svg class="ruins" viewBox="0 0 1440 300" preserveAspectRatio="xMidYMax slice" style="height:' + Math.round(h * .8) + 'px"><path fill="#0B0B0D" fill-rule="evenodd" d="' + ruins(1440, 300, 120, 9, (opts.seed || 7) + 4, 120) + '"/></svg>' +
-      '<div class="fog b" style="bottom:-40px;height:' + Math.round(h * .5) + 'px;background:radial-gradient(ellipse 50% 60% at 50% 60%, rgba(133,131,138,.14), transparent 70%)"></div>' +
+      '<div class="plx" style="--d:.15"><div style="position:absolute;inset:0;background:radial-gradient(ellipse 55% 60% at ' + (opts.lx || 70) + '% 25%, rgba(185,154,104,.15), transparent 70%), radial-gradient(ellipse 45% 55% at 5% 100%, rgba(113,32,42,.38), transparent 70%), radial-gradient(ellipse 80% 60% at 50% 0%, rgba(101,113,125,.12), transparent 70%)"></div></div>' +
+      (opts.far === false ? "" : '<div class="plx" style="--d:.35"><svg class="ruins" viewBox="0 0 1440 460" preserveAspectRatio="xMidYMax slice" style="height:' + Math.round(h * 1.3) + 'px;opacity:.9"><path fill="#141418" fill-rule="evenodd" d="' + ruins(1440, 460, 150, 6, opts.seed || 7, 230) + '"/></svg></div>') +
+      '<div class="plx" style="--d:.55"><div class="fog" style="bottom:40px;height:' + Math.round(h * .8) + 'px;background:radial-gradient(ellipse 40% 50% at 30% 60%, rgba(133,131,138,.16), transparent 70%), radial-gradient(ellipse 35% 45% at 75% 50%, rgba(133,131,138,.12), transparent 70%)"></div></div>' +
+      '<div class="plx" style="--d:.8"><svg class="ruins" viewBox="0 0 1440 300" preserveAspectRatio="xMidYMax slice" style="height:' + Math.round(h * .8) + 'px"><path fill="#0B0B0D" fill-rule="evenodd" d="' + ruins(1440, 300, 120, 9, (opts.seed || 7) + 4, 120) + '"/></svg></div>' +
+      '<div class="plx" style="--d:1"><div class="fog b" style="bottom:-40px;height:' + Math.round(h * .5) + 'px;background:radial-gradient(ellipse 50% 60% at 50% 60%, rgba(133,131,138,.14), transparent 70%)"></div></div>' +
       '<div style="position:absolute;inset:0;background:linear-gradient(180deg, transparent 55%, #09090B 100%)"></div>' +
       '<svg class="grain"><filter id="g' + (opts.seed || 7) + '"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" stitchTiles="stitch"/></filter><rect width="100%" height="100%" filter="url(#g' + (opts.seed || 7) + ')"/></svg>' +
       "</div>";
@@ -161,7 +161,7 @@
     }).join("");
     var topWr = D.champions.filter(function (c) { return c.games >= 5; }).sort(function (a, b) { return b.wr - a.wr; }).slice(0, 5);
     var gate = "M0 640 L0 520 L180 520 L180 300 L260 300 L260 520 L460 520 L460 230 Q460 60 720 20 Q980 60 980 230 L980 520 L1180 520 L1180 300 L1260 300 L1260 520 L1440 520 L1440 640 Z M540 640 L540 280 Q540 140 720 100 Q900 140 900 280 L900 640 Z";
-    return '<section class="hero" aria-label="メインビジュアル">' + atmo({ h: 420, far: false, lx: 68 }).replace('<div class="atmo" aria-hidden="true">', '<div class="atmo" aria-hidden="true"><div class="hero-art"><img src="kagura-skin.png" alt=""></div><div style="position:absolute;inset:0;background:linear-gradient(90deg, rgba(9,9,11,.82) 0%, rgba(9,9,11,.5) 40%, rgba(9,9,11,0) 70%)"></div>') +
+    return '<section class="hero" aria-label="メインビジュアル">' + atmo({ h: 420, far: false, lx: 68 }).replace('<div class="atmo" aria-hidden="true">', '<div class="atmo" aria-hidden="true"><div class="plx" style="--d:.3"><div class="hero-art"><img src="kagura-skin.png" alt=""></div></div><div style="position:absolute;inset:0;background:linear-gradient(90deg, rgba(9,9,11,.82) 0%, rgba(9,9,11,.5) 40%, rgba(9,9,11,0) 70%)"></div>') +
       '<div class="wrap hero-body"><div class="hero-copy"><span class="eyebrow rise">TACTICAL INTELLIGENCE ARCHIVE</span>' +
       '<h1 class="rise d1">KNOW YOUR<br>ENEMY.<br><em>Master the Veil.</em></h1>' +
       '<p class="lead rise d2">勝敗を分けるのは、相手を知っているかどうか。<br>対面ごとの記録と立ち回りを、ひとつの書庫に。</p>' +
@@ -2033,6 +2033,83 @@
       return '<span class="rv-icon"><img src="' + esc(x.img) + '" alt=""><span>' + esc(name) + "</span></span>";
     }).join("") + "</div></div>";
   }
+
+  /* ---------------- motion: embers in the page headers, depth that follows the pointer, a veil between pages ----------------
+     All of it is skipped for people who ask their device for less motion. */
+  var FX = { reduce: window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches, cv: [], raf: 0, io: null, last: 0 };
+  function mountEmbers() {
+    FX.cv = [];
+    if (FX.reduce) return;
+    if (!FX.io && window.IntersectionObserver) FX.io = new IntersectionObserver(function (es) { es.forEach(function (e) { if (e.target._emb) e.target._emb.on = e.isIntersecting; }); kickEmbers(); });
+    document.querySelectorAll(".phead .atmo, .hero .atmo, .dhero .atmo").forEach(function (a) {
+      var host = a.parentNode, cv = document.createElement("canvas"); cv.className = "embers"; cv.setAttribute("aria-hidden", "true");
+      host.insertBefore(cv, a.nextSibling);
+      var st = { cv: cv, ctx: cv.getContext("2d"), ps: [], on: true, w: 0, h: 0 }; cv._emb = st; FX.cv.push(st);
+      if (FX.io) FX.io.observe(cv);
+    });
+    kickEmbers();
+  }
+  function emberNew(st, anywhere) {
+    var gold = Math.random() < .72;
+    return { x: Math.random() * st.w, y: anywhere ? Math.random() * st.h : st.h + 6, vy: -(12 + Math.random() * 34), vx: (Math.random() - .5) * 8,
+      r: .6 + Math.random() * Math.random() * 2.6, ph: Math.random() * 6.28, sw: 6 + Math.random() * 16, life: 0, max: 4 + Math.random() * 7,
+      c: gold ? [227, 190 + Math.random() * 30, 120] : [236, 120 + Math.random() * 40, 60] };
+  }
+  function emberSize(st) {
+    var r = st.cv.getBoundingClientRect(), dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+    if (!r.width) return false;
+    if (Math.abs(r.width - st.w) > 1 || Math.abs(r.height - st.h) > 1) {
+      st.w = r.width; st.h = r.height; st.cv.width = Math.round(r.width * dpr); st.cv.height = Math.round(r.height * dpr); st.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      var n = Math.round(Math.max(18, Math.min(84, r.width * r.height / 11000)) * (r.width < 600 ? .6 : 1));
+      st.ps = []; for (var i = 0; i < n; i++) st.ps.push(emberNew(st, true));
+    }
+    return true;
+  }
+  function kickEmbers() { if (!FX.raf && FX.cv.length && !document.hidden) { FX.last = performance.now(); FX.raf = requestAnimationFrame(stepEmbers); } }
+  function stepEmbers(now) {
+    FX.raf = 0;
+    var dt = Math.min(.05, (now - FX.last) / 1000), any = false; FX.last = now;
+    FX.cv.forEach(function (st) {
+      if (!st.on || !st.cv.isConnected || !emberSize(st)) return;
+      any = true;
+      var g = st.ctx; g.clearRect(0, 0, st.w, st.h); g.globalCompositeOperation = "lighter";
+      st.ps.forEach(function (p, i) {
+        p.life += dt; p.ph += dt * 1.6;
+        p.x += (p.vx + Math.sin(p.ph) * p.sw) * dt; p.y += p.vy * dt;
+        if (p.life > p.max || p.y < -10 || p.x < -20 || p.x > st.w + 20) { st.ps[i] = emberNew(st, false); return; }
+        var fade = Math.min(1, p.life / .8) * Math.min(1, (p.max - p.life) / 1.6) * (.65 + .35 * Math.sin(p.ph * 3.1)), c = p.c;
+        g.fillStyle = "rgba(" + c[0] + "," + (c[1] | 0) + "," + c[2] + "," + (.11 * fade).toFixed(3) + ")"; g.beginPath(); g.arc(p.x, p.y, p.r * 4, 0, 6.283); g.fill();
+        g.fillStyle = "rgba(" + c[0] + "," + (c[1] | 0) + "," + c[2] + "," + (.95 * fade).toFixed(3) + ")"; g.beginPath(); g.arc(p.x, p.y, p.r, 0, 6.283); g.fill();
+      });
+    });
+    if (any && !document.hidden) FX.raf = requestAnimationFrame(stepEmbers);
+  }
+  document.addEventListener("visibilitychange", kickEmbers);
+  /* depth: the layers of the header move a little with the pointer (or the phone's tilt, where the browser allows it without asking) */
+  (function () {
+    if (FX.reduce) return;
+    var tx = 0, ty = 0, pend = 0, root = document.documentElement;
+    function put() { pend = 0; root.style.setProperty("--mx", (tx * -22).toFixed(1) + "px"); root.style.setProperty("--my", (ty * -12).toFixed(1) + "px"); }
+    function aim(x, y) { tx = Math.max(-1, Math.min(1, x)); ty = Math.max(-1, Math.min(1, y)); if (!pend) pend = requestAnimationFrame(put); }
+    if (window.matchMedia && matchMedia("(pointer: fine)").matches) {
+      window.addEventListener("pointermove", function (e) { aim(e.clientX / innerWidth * 2 - 1, e.clientY / innerHeight * 2 - 1); }, { passive: true });
+    } else if (window.DeviceOrientationEvent && typeof DeviceOrientationEvent.requestPermission !== "function") {
+      window.addEventListener("deviceorientation", function (e) { if (e.gamma == null) return; aim(e.gamma / 25, (e.beta - 45) / 30); }, { passive: true });
+    }
+  })();
+  /* the veil: a dark panel with a gold edge sweeps across while the next page is drawn */
+  function veilGo(draw) {
+    var v = document.getElementById("veil-wipe");
+    if (FX.reduce || !v || !document.getElementById("curtain") || !document.getElementById("curtain").classList.contains("done")) { draw(); return; }
+    clearTimeout(FX.vt1); clearTimeout(FX.vt2);
+    v.className = "veil-wipe in";
+    FX.vt1 = setTimeout(function () {
+      draw();
+      v.className = "veil-wipe out";
+      FX.vt2 = setTimeout(function () { v.className = "veil-wipe"; }, 520);
+    }, 280);
+  }
+
   /* ---------------- layout ---------------- */
   var NAV = [["home", "HOME"], ["me", "MY PAGE"], ["champions", "CHAMPIONS"], ["equipment", "EQUIPMENT"], ["matchup", "MATCHUP LAB"], ["patch", "PATCH &amp; META"], ["lore", "LORE ARCHIVE"]];
   function header(cur) {
@@ -2101,6 +2178,7 @@
     if (dbOn()) routeHeroes().forEach(ensureHero);
     fillAds();
     mountCharts(keepScroll);
+    mountEmbers();
     if (r.focus) { var el = document.getElementById(r.focus); if (el) setTimeout(function () { el.scrollIntoView({ block: "center" }); }, 60); }
     else if (!keepScroll) window.scrollTo(0, 0);
     var titles = { roulette: "ROULETTE — VEIL", home: "VEIL", champions: "CHAMPIONS — VEIL", equipment: "EQUIPMENT — VEIL", matchup: "MATCHUP LAB — VEIL", lore: "LORE ARCHIVE — VEIL", patch: "PATCH & META — VEIL" };
@@ -2357,7 +2435,7 @@
   /* ---------------- boot ---------------- */
   if (dbOn()) dbCacheLoad();              /* last DB statistics kept in this browser: shown at once, then checked for updates */
   var tp0 = topPairs(1)[0]; if (tp0) S.lab = { you: tp0.y, enemy: tp0.e, lane: tp0.lane };
-  window.addEventListener("hashchange", function () { closeSearch(); S.artSel = {}; render(); });
+  window.addEventListener("hashchange", function () { closeSearch(); S.artSel = {}; veilGo(render); });
   render();
   if (dbOn()) { try { dbStats(); loadContent(); } catch (e) {} }
   var curtain = document.getElementById("curtain");
