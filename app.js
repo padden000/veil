@@ -2035,7 +2035,7 @@
     }).join("") + "</div></div>";
   }
 
-  /* ---------------- motion: embers in the page headers, depth that follows the pointer, a veil between pages ----------------
+  /* ---------------- motion: embers in the page headers, depth that follows the pointer ----------------
      All of it is skipped for people who ask their device for less motion. */
   var FX = { reduce: window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches, cv: [], raf: 0, io: null, last: 0 };
   function mountEmbers() {
@@ -2117,21 +2117,7 @@
       window.addEventListener("deviceorientation", function (e) { if (e.gamma == null) return; aim(e.gamma / 25, (e.beta - 45) / 30); }, { passive: true });
     }
   })();
-  /* the veil: a dark panel with a gold edge sweeps across while the next page is drawn */
-  function veilGo(draw) {
-    var v = document.getElementById("veil-wipe");
-    if (FX.reduce || !v || !document.getElementById("curtain") || !document.getElementById("curtain").classList.contains("done")) { draw(); return; }
-    clearTimeout(FX.vt1); clearTimeout(FX.vt2); clearTimeout(FX.vt3);
-    v.className = "veil-wipe in";
-    FX.vt1 = setTimeout(function () {
-      draw();
-      v.className = "veil-wipe in hold";
-      FX.vt2 = setTimeout(function () {
-        v.className = "veil-wipe out";
-        FX.vt3 = setTimeout(function () { v.className = "veil-wipe"; }, 620);
-      }, 180);
-    }, 360);
-  }
+
 
   /* ---------------- generative light (drawn by code every frame, no footage) ----------------
      silk    — thousands of motes carried by a swirling flow field leave trails of light (default page headers)
@@ -2657,7 +2643,7 @@
   /* ---------------- boot ---------------- */
   if (dbOn()) dbCacheLoad();              /* last DB statistics kept in this browser: shown at once, then checked for updates */
   var tp0 = topPairs(1)[0]; if (tp0) S.lab = { you: tp0.y, enemy: tp0.e, lane: tp0.lane };
-  window.addEventListener("hashchange", function () { closeSearch(); S.artSel = {}; veilGo(render); });
+  window.addEventListener("hashchange", function () { closeSearch(); S.artSel = {}; render(); });
   render();
   if (dbOn()) { try { dbStats(); loadContent(); } catch (e) {} }
   var curtain = document.getElementById("curtain");
