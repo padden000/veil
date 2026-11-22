@@ -2037,7 +2037,9 @@
 
   /* ---------------- motion: embers in the page headers, depth that follows the pointer ----------------
      All of it is skipped for people who ask their device for less motion. */
-  var FX = { reduce: window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches, cv: [], raf: 0, io: null, last: 0 };
+  var FX_KEY = "veil-fx";   /* "off" = the visitor turned the effects off; "lite" = this device was too slow for the generative visuals */
+  function fxPref() { try { return localStorage.getItem(FX_KEY) || ""; } catch (e) { return ""; } }
+  var FX = { reduce: (window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches) || fxPref() === "off", cv: [], raf: 0, io: null, last: 0, tick: 0 };
   function mountEmbers() {
     FX.cv = [];
     if (FX.reduce) return;
@@ -2074,6 +2076,8 @@
   function kickEmbers() { if (!FX.raf && FX.cv.length && !document.hidden) { FX.last = performance.now(); FX.raf = requestAnimationFrame(stepEmbers); } }
   function stepEmbers(now) {
     FX.raf = 0;
+    if (now - FX.tick < 31) { FX.raf = requestAnimationFrame(stepEmbers); return; }   /* about 30 frames a second is plenty */
+    FX.tick = now;
     var dt = Math.min(.05, (now - FX.last) / 1000), any = false; FX.last = now;
     FX.cv.forEach(function (st) {
       if (!st.on || !st.cv.isConnected || !emberSize(st)) return;
@@ -2133,7 +2137,7 @@
   function mountGfx() {
     GFX.list.forEach(function (g) { if (g.stop) g.stop(); });
     GFX.list = [];
-    if (FX.reduce) return;
+    if (FX.reduce || fxPref() === "lite") return;
     if (!GFX.io && window.IntersectionObserver) GFX.io = new IntersectionObserver(function (es) { es.forEach(function (e) { if (e.target._gfx) e.target._gfx.on = e.isIntersecting; }); kickGfx(); });
     var host = document.querySelector(".phead"); if (!host) return;
     var kind = gfxKind(), cv = document.createElement("canvas"); cv.className = "gfx gfx-" + kind; cv.setAttribute("aria-hidden", "true");
@@ -2147,6 +2151,11 @@
   function kickGfx() { if (!GFX.raf && GFX.list.length && !document.hidden) GFX.raf = requestAnimationFrame(stepGfx); }
   function stepGfx(now) {
     GFX.raf = 0; var any = false;
+    if (now - (GFX.tick || 0) < 31) { GFX.raf = requestAnimationFrame(stepGfx); return; }
+    /* a device that cannot keep up (frames slower than ~18 a second for a few seconds) gets the light version from now on */
+    if (GFX.tick && !document.hidden) { var gap = now - GFX.tick; GFX.slow = gap > 55 ? (GFX.slow || 0) + 1 : Math.max(0, (GFX.slow || 0) - 2);
+      if (GFX.slow > 50) { try { localStorage.setItem(FX_KEY, "lite"); } catch (e) {} GFX.list.forEach(function (g) { g.cv.remove(); }); GFX.list = []; return; } }
+    GFX.tick = now;
     GFX.list.forEach(function (g) {
       if (!g.on || !g.cv.isConnected) return;
       var r = g.cv.getBoundingClientRect(); if (!r.width) return;
@@ -2156,7 +2165,7 @@
     });
     if (any && !document.hidden) GFX.raf = requestAnimationFrame(stepGfx);
   }
-  document.addEventListener("visibilitychange", kickGfx);
+  document.addEventListener("visibilitychange", function () { GFX.tick = 0; GFX.slow = 0; kickGfx(); });
   /* smooth 2-D noise for the flow field */
   var NZ = (function () { var v = [], pm = []; for (var i = 0; i < 256; i++) { v.push(Math.random()); pm.push(i); } for (i = 255; i > 0; i--) { var j = Math.floor(Math.random() * (i + 1)), s = pm[i]; pm[i] = pm[j]; pm[j] = s; } return { v: v, p: pm.concat(pm) }; })();
   function vnoise(x, y) {
@@ -2170,7 +2179,7 @@
       var ctx = g.cv.getContext("2d"), ps = [], S = .6, n = GFX.small ? 1100 : 2600, src = [];
       var COL = [[255, 196, 120], [244, 92, 96], [170, 110, 255], [255, 226, 170]];
       g.resize = function () {
-        g.cv.width = Math.round(g.w * S); g.cv.height = Math.round(g.h * S); ctx.fillStyle = "#09090B"; ctx.fillRect(0, 0, g.cv.width, g.cv.height);
+        g.cv.width = Math.round(g.w * S); g.cv.height = Math.round(g.h * S);
         src = []; for (var k = 0; k < 5; k++) src.push({ ph: Math.random() * 6.28, sp: .05 + Math.random() * .08, c: COL[k % COL.length] });
         ps = []; for (var i = 0; i < n; i++) ps.push(seed(0, true));
       };
@@ -2182,12 +2191,12 @@
       function fld(x, y) { return vnoise(x, y) * .7 + vnoise(x * 2.1 + 5.2, y * 2.1 + 1.3) * .3; }
       g.frame = function (t) {
         var W = g.cv.width, H = g.cv.height, sc = 1 / (H * 1.1), tt = t * .025;
-        ctx.globalCompositeOperation = "source-over"; ctx.fillStyle = "rgba(9,9,11,0.03)"; ctx.fillRect(0, 0, W, H);
+        g.n = (g.n || 0) + 1; ctx.globalCompositeOperation = "destination-out"; ctx.fillStyle = g.n % 4 ? "rgba(0,0,0,0.03)" : "rgba(0,0,0,0.12)"; ctx.fillRect(0, 0, W, H);   /* the stronger wipe now and then clears the faint leftovers */
         ctx.globalCompositeOperation = "lighter"; ctx.lineWidth = 1;
         for (var i = 0; i < ps.length; i++) {
           var p = ps[i], e = .004, nx = p.x * sc + tt, ny = p.y * sc - tt * .6;
           var dx = (fld(nx, ny + e) - fld(nx, ny - e)) / (2 * e), dy = -(fld(nx + e, ny) - fld(nx - e, ny)) / (2 * e), m = Math.hypot(dx, dy) || 1;
-          var x2 = p.x + dx / m * 1.8, y2 = p.y + dy / m * 1.8, a = Math.min(1, p.life / 60) * .16;
+          var x2 = p.x + dx / m * 1.8, y2 = p.y + dy / m * 1.8, fx = Math.min(1, Math.max(0, (p.x / W - .12) / .45)), a = Math.min(1, p.life / 60) * .16 * fx * Math.min(1, (H - p.y) / (H * .25));
           ctx.strokeStyle = "rgba(" + p.c[0] + "," + p.c[1] + "," + p.c[2] + "," + a.toFixed(3) + ")";
           ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(x2, y2); ctx.stroke();
           p.x = x2; p.y = y2; p.life--;
@@ -2197,11 +2206,13 @@
       return true;
     },
     slime: function (g) {
-      var ctx = g.cv.getContext("2d"), W, H, trail, tmp, ag = [], img, N = GFX.small ? 4000 : 11000;
+      var ctx = g.cv.getContext("2d"), W, H, trail, tmp, ag = [], img, FADE, FADEY, N = GFX.small ? 3000 : 8000;
       var SA = .55, SD = 6, RA = .45, DEP = 1.6;
       g.resize = function () {
         H = GFX.small ? 120 : 170; W = Math.max(60, Math.round(H * g.w / g.h));
         g.cv.width = W; g.cv.height = H; trail = new Float32Array(W * H); tmp = new Float32Array(W * H); img = ctx.createImageData(W, H);
+        FADE = new Float32Array(W); for (var fx = 0; fx < W; fx++) FADE[fx] = Math.min(1, Math.max(0, (fx / W - .15) / .45));
+        FADEY = new Float32Array(H); for (var fy = 0; fy < H; fy++) FADEY[fy] = Math.min(1, (H - fy) / (H * .25));
         ag = []; for (var i = 0; i < N; i++) ag.push({ x: W * (.25 + Math.random() * .75), y: Math.random() * H, a: Math.random() * 6.283 });
       };
       function at(x, y) { x = (x + W) % W | 0; y = (y + H) % H | 0; return trail[y * W + x]; }
@@ -2223,23 +2234,24 @@
         var d = img.data;
         for (var k = 0; k < W * H; k++) {
           var v = Math.min(1, trail[k] / 9), v2 = v * v;   /* faint threads blue-violet, dense veins gold */
-          d[k * 4] = 70 + 185 * v2; d[k * 4 + 1] = 60 + 150 * v2; d[k * 4 + 2] = 200 - 90 * v2; d[k * 4 + 3] = Math.min(235, 260 * v);
+          d[k * 4] = 70 + 185 * v2; d[k * 4 + 1] = 60 + 150 * v2; d[k * 4 + 2] = 200 - 90 * v2; d[k * 4 + 3] = Math.min(235, 260 * v) * FADE[k % W] * FADEY[(k / W) | 0];
         }
         ctx.putImageData(img, 0, 0);
       };
       return true;
     },
     mandel: function (g) {
-      var gl = g.cv.getContext("webgl", { premultipliedAlpha: false, antialias: false }); if (!gl) return false;
+      var gl = g.cv.getContext("webgl", { premultipliedAlpha: true, antialias: false, alpha: true }); if (!gl) return false;
       var hp = gl.getShaderPrecisionFormat(gl.FRAGMENT_SHADER, gl.HIGH_FLOAT).precision > 0 ? "highp" : "mediump";
       var fs = "precision " + hp + " float;uniform vec2 R;uniform float T;uniform float Z;uniform vec2 C;" +
-        "void main(){vec2 p=(gl_FragCoord.xy-.5*R)/R.y;vec2 c=C+p*Z;vec2 z=vec2(0.);float n=0.;const int M=" + (GFX.small ? 90 : 170) + ";" +
+        "void main(){vec2 p=(gl_FragCoord.xy-.5*R)/R.y;vec2 c=C+p*Z;vec2 z=vec2(0.);float n=0.;const int M=" + (GFX.small ? 80 : 130) + ";" +
         "for(int i=0;i<M;i++){z=vec2(z.x*z.x-z.y*z.y,2.*z.x*z.y)+c;if(dot(z,z)>256.)break;n+=1.;}" +
-        "if(n>=float(M)){gl_FragColor=vec4(.035,.035,.045,1.);return;}" +
+        "float fa=clamp((gl_FragCoord.x/R.x-.15)/.45,0.,1.)*clamp(gl_FragCoord.y/(R.y*.25),0.,1.);" +
+        "if(n>=float(M)){gl_FragColor=vec4(0.);return;}" +
         "float s=n-log2(log2(dot(z,z)))+4.;float k=s*.045+T*.03;" +
         "vec3 col=.5+.5*cos(6.2831*(k+vec3(.02,.12,.28)));col=mix(col*vec3(1.,.72,.38),vec3(.25,.75,.95)*col.b,smoothstep(.55,1.,col.b)*.6);" +
         "float edge=exp(-s*.035);col*=1.15-edge*.2;col*=smoothstep(0.,1.2,1.4-length(p*vec2(.7,1.)));" +
-        "gl_FragColor=vec4(col*.85,1.);}";
+        "float al=clamp(max(col.r,max(col.g,col.b)),0.,1.)*fa;gl_FragColor=vec4(col*.85*fa,al);}";
       var prog = glProg(gl, fs); if (!prog) return false;
       var S = .5;
       g.resize = function () { g.cv.width = Math.round(g.w * S); g.cv.height = Math.round(g.h * S); gl.viewport(0, 0, g.cv.width, g.cv.height); };
@@ -2351,7 +2363,7 @@
     return '<footer class="site-footer"><div class="wrap top"><div style="display:flex;flex-direction:column;gap:16px"><a class="logo" href="#home">' + LOGO + "<span>VEIL</span></a>" +
       '<p class="disclaimer">本サイトはMoontonとは無関係の非公式ファンサイトです。Mobile Legends: Bang Bang、ヒーロー名、アートワーク等の権利はMoontonに帰属します。勝率などの数値は、VEILに登録されて承認された試合記録から集計しています。</p></div>' +
       '<div class="cols"><div class="col"><span class="mono gold">DATABASE</span><a href="#me">マイページ</a><a href="#champions">キャラクター図鑑</a><a href="#roulette">ヒーロールーレット</a><a href="#equipment">装備一覧</a><a href="#matchup">対面攻略</a><a href="#patch">パッチ・メタ</a></div><div class="col"><span class="mono gold">ARCHIVE</span><a href="#lore">世界観</a><a href="#home">HOME</a></div></div></div>' +
-      '<div class="wrap bottom"><span class="mono muted">EVERY BATTLE LEAVES A TRACE.</span><span class="mono muted">VEIL · PROTOTYPE v0.2</span></div></footer>';
+      '<div class="wrap bottom"><span class="mono muted">EVERY BATTLE LEAVES A TRACE.</span><span class="mono muted"><button class="fx-toggle mono" type="button" data-action="fx-toggle">' + (fxPref() === "off" ? "演出: オフ(オンにする)" : fxPref() === "lite" ? "演出: 軽量(元に戻す)" : "演出: オン(オフにする)") + "</button> · VEIL · PROTOTYPE v0.2</span></div></footer>";
   }
 
   /* ---------------- router ---------------- */
@@ -2444,6 +2456,7 @@
     if (act === "rv-log-more") { loadLog(false); return; }
     if (act === "mem-f") { S.memF = t.getAttribute("data-f"); document.querySelectorAll('[data-action="mem-f"]').forEach(function (b) { b.setAttribute("aria-pressed", String(b === t)); }); drawMembers(); return; }
     if (act === "hn-edit") { var hb = document.getElementById(t.getAttribute("data-f") === "pc" ? "hn-pc" : "hn-pb"); if (hb) { hb.innerHTML = heroNoteEditor(t.getAttribute("data-f"), t.getAttribute("data-hero")); var ta0 = hb.querySelector("textarea"); if (ta0) ta0.focus(); } return; }
+    if (act === "fx-toggle") { try { if (fxPref()) localStorage.removeItem(FX_KEY); else localStorage.setItem(FX_KEY, "off"); } catch (e) {} location.reload(); return; }
     if (act === "hn-save") { heroNoteSave(t); return; }
     if (act === "gt-edit") { var gb = document.getElementById("gt-" + t.getAttribute("data-kind") + "-" + t.getAttribute("data-id")); if (gb) { gb.innerHTML = gtEditor(t.getAttribute("data-kind"), t.getAttribute("data-id")); var gta = gb.querySelector("textarea"); if (gta) gta.focus(); } return; }
     if (act === "gt-save" || act === "gt-reset") { gtSave(t, act === "gt-reset"); return; }
