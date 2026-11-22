@@ -1,7 +1,7 @@
 -- =====================================================================
 -- VEIL: 運営の道具 (2026-11-22)
 --   作業の記録 / 登録停止・統計から外す / 要確認の試合は複数人で判定 / まとめて承認 /
---   承認済みの試合の修正・取り消し / ヒーロー解説・TIER・パッチの編集
+--   承認済みの試合の修正・取り消し / ヒーロー解説・TIER・パッチ・装備の説明文の編集
 -- Supabase → SQL Editor に全部貼って Run。stats_day.sql のあとに 1 回。何回実行しても大丈夫です。
 -- =====================================================================
 
@@ -683,5 +683,49 @@ grant execute on function public.submit_match(jsonb), public.update_match(bigint
   public.list_profiles(), public.set_role(uuid, text), public.set_user_flags(uuid, boolean, boolean), public.set_current_season(text),
   public.audit_list(int, bigint, text[]), public.save_hero_note(text, jsonb), public.set_hero_tier(text, text, text),
   public.save_patch(bigint, jsonb), public.delete_patch(bigint) to authenticated;
+
+
+-- ---------- 装備・天賦・スペルの説明文の書き換え (元の文は gear.js のまま。書き換えた分だけここに入る) ----------
+--   item: passive (EFFECT) / stats (上がる能力、1行に1つ)   talent: desc / extra   spell: desc
+create table if not exists public.gear_texts (
+  kind         text not null check (kind in ('item', 'talent', 'spell')),
+  id           text not null check (id ~ '^[a-z0-9_]{1,40}$'),
+  field        text not null check (field in ('passive', 'stats', 'desc', 'extra')),
+  body         text not null check (char_length(body) <= 3000),
+  editor_name  text not null default '',
+  updated_at   timestamptz not null default now(),
+  primary key (kind, id, field)
+);
+alter table public.gear_texts enable row level security;
+drop policy if exists gear_texts_read on public.gear_texts;
+create policy gear_texts_read on public.gear_texts for select to anon, authenticated using (true);
+revoke all on public.gear_texts from anon, authenticated;
+grant select on public.gear_texts to anon, authenticated;
+
+-- body null or '' = back to the original text
+create or replace function public.save_gear_text(kind text, id text, field text, body text) returns void
+language plpgsql security definer set search_path = '' as $$
+declare old text; nm text;
+begin
+  if coalesce(public.my_role(), '') not in ('manager', 'admin') then raise exception '運営か管理者だけが編集できます'; end if;
+  if kind not in ('item', 'talent', 'spell') or coalesce(id, '') !~ '^[a-z0-9_]{1,40}$' then raise exception '対象が正しくありません'; end if;
+  if not ((kind = 'item' and field in ('passive', 'stats')) or (kind = 'talent' and field in ('desc', 'extra')) or (kind = 'spell' and field = 'desc')) then
+    raise exception '編集できる項目ではありません';
+  end if;
+  if char_length(coalesce(body, '')) > 3000 then raise exception '3000文字までです'; end if;
+  select g.body into old from public.gear_texts g where g.kind = save_gear_text.kind and g.id = save_gear_text.id and g.field = save_gear_text.field;
+  if coalesce(body, '') = '' then
+    if old is null then return; end if;
+    delete from public.gear_texts g where g.kind = save_gear_text.kind and g.id = save_gear_text.id and g.field = save_gear_text.field;
+  else
+    if old is not distinct from body then return; end if;
+    select name into nm from public.profiles where profiles.id = auth.uid();
+    insert into public.gear_texts (kind, id, field, body, editor_name, updated_at) values (kind, id, field, body, coalesce(nm, ''), now())
+      on conflict on constraint gear_texts_pkey do update set body = excluded.body, editor_name = excluded.editor_name, updated_at = now();
+  end if;
+  perform public.veil_log('gear_text', null, null, jsonb_build_object('kind', kind, 'id', id, 'field', field, 'before', old, 'after', nullif(body, '')));
+end $$;
+revoke execute on function public.save_gear_text(text, text, text, text) from public, anon;
+grant execute on function public.save_gear_text(text, text, text, text) to authenticated;
 
 select public.refresh_stats();

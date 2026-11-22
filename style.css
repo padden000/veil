@@ -860,3 +860,7 @@ tr.rv-banned td { background: rgba(113,32,42,.18); }
 .rv-btns .chip { white-space: nowrap; }
 .rv-force { flex-basis: 100%; border-left: 0; padding-left: 0; flex-wrap: wrap; }
 .rv-log-what > span:first-child { display: inline; }
+.gt-foot { display: flex; align-items: center; justify-content: flex-end; gap: 10px; flex-wrap: wrap; }
+.gt-foot:empty { display: none; }
+.gt-edit { min-height: 28px !important; font-size: 11px; }
+.tcard .gt-editor textarea { font-size: 13px; }

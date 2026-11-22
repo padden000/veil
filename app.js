@@ -593,15 +593,16 @@
     return '<section class="phead">' + atmo({ h: 240, seed: 73 }) + '<div class="wrap">' + crumbs([["HOME", "#home"], ["EQUIPMENT", "#equipment"], [esc(it.name)]]) +
       '<div style="display:flex;flex-wrap:wrap;align-items:center;gap:28px">' + itemIcon(id, 120) + '<div style="display:flex;flex-direction:column;gap:10px"><span class="eyebrow">' + esc(catLabel(it)) + " · " + esc(it.tag) + '</span><h1 class="mincho rise" style="font-size:clamp(40px,5vw,64px);letter-spacing:.06em">' + esc(it.name) + "</h1>" + (it.price != null ? '<p class="mono muted" style="font-size:12px">価格 <span class="serif gold num" style="font-size:26px;letter-spacing:0">' + it.price.toLocaleString() + "</span></p>" : '<p class="mono muted" style="font-size:12px">' + esc(it.tag) + " · 価格は未掲載</p>") + "</div></div></div></section>" +
       '<section class="section tight"><div class="wrap dgrid"><div style="display:flex;flex-direction:column;gap:48px;min-width:0">' +
-      (it.stats.length ? '<div class="block"><h2>STATS <small>上がる能力</small></h2><ul class="istats big">' + it.stats.map(function (s) { return "<li>" + esc(s) + "</li>"; }).join("") + "</ul></div>" : "") +
-      '<div class="block"><h2>EFFECT <small>効果</small></h2>' + (it.passive ? '<p class="prose">' + esc(it.passive) + "</p>" : '<p class="muted">能力値が上がるだけで、特別な効果はありません。</p>') + (it.cut ? '<p class="muted" style="font-size:12px">ゲーム画面で説明が途中までしか表示されていなかったため、続きは準備中です。</p>' : "") + "</div>" +
+      '<div id="gt-item-' + id + '" class="gt-box" style="display:flex;flex-direction:column;gap:48px">' + (it.stats.length ? '<div class="block"><h2>STATS <small>上がる能力</small></h2><ul class="istats big">' + it.stats.map(function (s) { return "<li>" + esc(s) + "</li>"; }).join("") + "</ul></div>" : "") +
+      '<div class="block"><h2>EFFECT <small>効果</small></h2>' + (it.passive ? '<p class="prose">' + esc(it.passive) + "</p>" : '<p class="muted">能力値が上がるだけで、特別な効果はありません。</p>') + (it.cut ? '<p class="muted" style="font-size:12px">ゲーム画面で説明が途中までしか表示されていなかったため、続きは準備中です。</p>' : "") +
+      '<div class="gt-foot">' + gtNote(it) + gtBtn("item", id) + "</div></div></div>" +
       '<div class="block"><h2>USED BY <small>この装備を使うキャラ</small></h2>' + (users.length ? '<div class="side-list">' + users.map(function (u) {
         return '<a href="#champion-' + u.c.id + '">' + portrait(u.c, true) + '<span class="serif" style="font-size:20px;flex:1">' + esc(u.c.name) + "</span></a>"; }).join("") + "</div>" : '<div class="slot"><span class="muted">ヒーローごとのビルドが入ると、ここにこの装備を使うヒーローが並びます。</span></div>') + "</div>" + gearSource() + "</div>" +
       '<aside class="daside"><div class="block"><h2 style="font-size:26px">SIMILAR <small>' + (it.price != null ? "近い価格の" : "同じ種類の") + esc(CAT[c0]) + '装備</small></h2><div class="side-list">' + same.map(function (k) { return '<a href="#item-' + k + '">' + itemIcon(k, 44) + '<span class="mincho" style="font-size:16px;flex:1">' + esc(G.items[k].name) + '</span><span class="mono muted num" style="font-size:11px">' + (G.items[k].price != null ? G.items[k].price.toLocaleString() : "") + "</span></a>"; }).join("") + "</div></div></aside></div></section>";
   }
   function talentCard(t) {
-    return '<article class="tcard" id="tal-' + t.id + '">' + gicon("icons/t-" + t.id + ".webp", 56) + '<div style="display:flex;flex-direction:column;gap:6px;min-width:0"><h3 class="mincho">' + esc(t.name) + "</h3>" + (t.sub ? '<span class="gold" style="font-size:13px">' + esc(t.sub) + "</span>" : "") +
-      '<p style="font-size:14px;line-height:1.8">' + esc(t.desc) + "</p>" + (t.extra ? '<p class="muted" style="font-size:12px;line-height:1.7">' + esc(t.extra) + (t.cut ? "…" : "") + "</p>" : "") + "</div></article>";
+    return '<article class="tcard" id="tal-' + t.id + '">' + gicon("icons/t-" + t.id + ".webp", 56) + '<div class="gt-box" id="gt-talent-' + t.id + '" style="display:flex;flex-direction:column;gap:6px;min-width:0"><h3 class="mincho">' + esc(t.name) + "</h3>" + (t.sub ? '<span class="gold" style="font-size:13px">' + esc(t.sub) + "</span>" : "") +
+      '<p style="font-size:14px;line-height:1.8">' + esc(t.desc) + "</p>" + (t.extra ? '<p class="muted" style="font-size:12px;line-height:1.7">' + esc(t.extra) + (t.cut ? "…" : "") + "</p>" : "") + '<div class="gt-foot">' + gtNote(t) + gtBtn("talent", t.id) + "</div></div></article>";
   }
   function viewEmblem() {
     return '<section class="phead">' + atmo({ h: 260, seed: 77 }) + '<div class="wrap">' + crumbs([["HOME", "#home"], ["EQUIPMENT", "#equipment"], ["EMBLEM"]]) +
@@ -620,8 +621,8 @@
       '<div class="phead-row"><div style="display:flex;flex-direction:column;gap:14px"><h1 class="rise">SPELLS</h1><p class="jp rise d1">バトルスキル — 試合で1つだけ持ち込める切り札</p></div>' +
       '<div style="display:flex;align-items:baseline;gap:12px"><span class="serif gold num" style="font-size:64px;line-height:1">' + G.spells.length + '</span><span class="mono muted">種類</span></div></div>' + gearTabs("spells") + "</div></section>" +
       '<section class="section tight" style="padding-top:40px"><div class="wrap" style="display:flex;flex-direction:column;gap:32px"><div class="tgrid">' + G.spells.map(function (s) {
-        return '<article class="tcard" id="spell-' + s.id + '">' + gicon("icons/s-" + s.id + ".webp", 64) + '<div style="display:flex;flex-direction:column;gap:6px;min-width:0"><div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap"><h3 class="mincho">' + esc(s.name) + '</h3><span class="mono gold" style="font-size:11px">CD ' + s.cd + '秒</span></div><span class="tag dim" style="align-self:flex-start">' + esc(s.tag) + "</span>" +
-          '<p style="font-size:14px;line-height:1.8">' + esc(s.desc) + (s.cut ? "…" : "") + "</p></div></article>"; }).join("") + "</div>" + gearSource() + "</div></section>";
+        return '<article class="tcard" id="spell-' + s.id + '">' + gicon("icons/s-" + s.id + ".webp", 64) + '<div class="gt-box" id="gt-spell-' + s.id + '" style="display:flex;flex-direction:column;gap:6px;min-width:0"><div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap"><h3 class="mincho">' + esc(s.name) + '</h3><span class="mono gold" style="font-size:11px">CD ' + s.cd + '秒</span></div><span class="tag dim" style="align-self:flex-start">' + esc(s.tag) + "</span>" +
+          '<p style="font-size:14px;line-height:1.8">' + esc(s.desc) + (s.cut ? "…" : "") + '</p><div class="gt-foot">' + gtNote(s) + gtBtn("spell", s.id) + "</div></div></article>"; }).join("") + "</div>" + gearSource() + "</div></section>";
   }
 
   /* ---------------- role switch on the detail page ---------------- */
@@ -1031,14 +1032,16 @@
     Promise.all([
       SB.from("hero_notes").select("hero,strengths,weaknesses,playbook,editor_name,updated_at"),
       SB.from("hero_tiers").select("hero,lane,tier,editor_name,updated_at"),
-      SB.from("patch_notes").select("id,version,released_on,title,body,changes,editor_name,updated_at").order("released_on", { ascending: false }).order("id", { ascending: false })
+      SB.from("patch_notes").select("id,version,released_on,title,body,changes,editor_name,updated_at").order("released_on", { ascending: false }).order("id", { ascending: false }),
+      SB.from("gear_texts").select("kind,id,field,body,editor_name,updated_at")
     ]).then(function (x) {
+      CT.gearMissing = !!x[3].error; if (!x[3].error) applyGearTexts(x[3].data || []);
       if (x[0].error || x[1].error || x[2].error) { CT.missing = true; CT.ready = true; return; }
       CT.notes = {}; (x[0].data || []).forEach(function (n) { CT.notes[n.hero] = n; });
       CT.tiers = {}; (x[1].data || []).forEach(function (r) { CT.tiers[r.hero + "|" + r.lane] = r; });
       CT.patches = x[2].data || []; CT.ready = true;
       var h = (location.hash || "").replace(/^#/, "");
-      if (/^champion-/.test(h) || h === "patch") softRender();
+      if (/^champion-/.test(h) || h === "patch" || /^item-/.test(h) || h === "equipment" || h === "emblem" || h === "spells") softRender();
     }).catch(function () { CT.missing = true; CT.ready = true; });
   }
   /* plain text → paragraphs; lines starting with ・ or - become a list */
@@ -1176,6 +1179,57 @@
       btn.disabled = false;
       if (res.error) { msg.className = "sub-msg bad"; msg.textContent = dbErr(res.error); return; }
       S.ptEditing = null; loadContent();
+    });
+  }
+
+  /* ---- 装備・天賦・スペルの説明文: 運営 / 管理者 の書き換え (元の文は gear.js、書き換えた分は gear_texts) ---- */
+  var GT_FIELDS = { item: [["passive", "EFFECT(効果)", 6], ["stats", "STATS(上がる能力・1行に1つ)", 4]], talent: [["desc", "説明", 3], ["extra", "補足", 3]], spell: [["desc", "説明", 5]] };
+  var GT_ORIG = {};
+  function gearObj(kind, id) {
+    if (kind === "item") return G.items[id] || null;
+    if (kind === "spell") return G.spells.filter(function (s) { return s.id === id; })[0] || null;
+    var f = null; G.talents.forEach(function (tr) { tr.list.forEach(function (x) { if (x.id === id) f = x; }); }); return f;
+  }
+  function gtVal(o, field) { return field === "stats" ? (o.stats || []).join("\n") : o[field] || ""; }
+  /* put the 運営's texts onto the gear data (the first time, keep the original so it can come back) */
+  function applyGearTexts(rows) {
+    Object.keys(GT_ORIG).forEach(function (k) { var a = k.split("|"), o = gearObj(a[0], a[1]); if (o) { o[a[2]] = GT_ORIG[k].v; o.cut = GT_ORIG[k].cut; delete o.edited; } });
+    (rows || []).forEach(function (r) {
+      var o = gearObj(r.kind, r.id); if (!o) return;
+      var k = r.kind + "|" + r.id + "|" + r.field;
+      if (!(k in GT_ORIG)) GT_ORIG[k] = { v: o[r.field], cut: o.cut };
+      o[r.field] = r.field === "stats" ? r.body.split("\n").map(function (s) { return s.trim(); }).filter(Boolean) : r.body;
+      if (r.field === "passive" || r.field === "desc" || r.field === "extra") o.cut = false;
+      o.edited = { by: r.editor_name, at: r.updated_at };
+    });
+  }
+  function gtOrig(kind, id, field) { var k = kind + "|" + id + "|" + field, o = gearObj(kind, id); return k in GT_ORIG ? (field === "stats" ? (GT_ORIG[k].v || []).join("\n") : GT_ORIG[k].v || "") : o ? gtVal(o, field) : ""; }
+  function gtBtn(kind, id) { return canManage() && !CT.gearMissing ? '<button class="chip gt-edit" type="button" data-action="gt-edit" data-kind="' + kind + '" data-id="' + id + '">文を直す</button>' : ""; }
+  function gtNote(o) { return o && o.edited ? '<span class="mono muted" style="font-size:10px">運営が修正' + (o.edited.by ? "(" + esc(o.edited.by) + ")" : "") + "</span>" : ""; }
+  function gtEditor(kind, id) {
+    var o = gearObj(kind, id); if (!o) return "";
+    return '<div class="hn-editor gt-editor" data-kind="' + kind + '" data-id="' + id + '">' + GT_FIELDS[kind].map(function (f) {
+      var changed = gtOrig(kind, id, f[0]) !== gtVal(o, f[0]);
+      return '<label class="sub-field hn-field"><span class="mono">' + f[1] + (changed ? ' <span class="gold">· 修正中</span>' : "") + '</span><textarea data-f="' + f[0] + '" rows="' + f[2] + '" maxlength="3000">' + esc(gtVal(o, f[0])) + "</textarea></label>" +
+        (changed ? '<details class="rv-diff"><summary>元の文を見る</summary><p class="muted" style="font-size:12px;white-space:pre-wrap">' + (esc(gtOrig(kind, id, f[0])) || "(なし)") + "</p></details>" : "");
+    }).join("") +
+      '<p class="muted" style="font-size:12px">元の文はゲーム画面から書き写したものです。直した文は全員に公開され、作業の記録に残ります。空にして保存すると元の文に戻ります。</p>' +
+      '<div class="sub-actions"><button class="chip on-gold" type="button" data-action="gt-save">保存する</button><button class="chip" type="button" data-action="gt-reset">元の文に戻す</button><button class="chip" type="button" data-action="gt-cancel">やめる</button><span class="sub-msg" role="status" aria-live="polite"></span></div></div>';
+  }
+  function gtSave(btn, reset) {
+    var ed = btn.closest(".gt-editor"), kind = ed.getAttribute("data-kind"), id = ed.getAttribute("data-id"), msg = ed.querySelector(".sub-msg"), calls = [];
+    ed.querySelectorAll("textarea").forEach(function (x) {
+      var f = x.getAttribute("data-f"), v = reset ? "" : x.value.replace(/\s+$/, ""), orig = gtOrig(kind, id, f), cur = gtVal(gearObj(kind, id), f);
+      if (!reset && v === orig) v = "";                      /* the same as the original: keep no copy */
+      if ((v || orig) === cur) return;                        /* nothing changed */
+      calls.push(SB.rpc("save_gear_text", { kind: kind, id: id, field: f, body: v || null }));
+    });
+    if (!calls.length) { render(true); return; }
+    btn.disabled = true; msg.className = "sub-msg"; msg.textContent = "保存しています…";
+    Promise.all(calls).then(function (rs) {
+      var bad = rs.filter(function (r) { return r.error; })[0];
+      if (bad) { btn.disabled = false; msg.className = "sub-msg bad"; msg.textContent = dbErr(bad.error); return; }
+      loadContent();
     });
   }
 
@@ -1725,7 +1779,7 @@
   }
   var FLAG_JP = { dup: "同じ試合がもうある", kda: "KDAが極端", short: "5分未満の試合", old: "60日以上前の試合", burst: "1時間に20件超の登録" };
   var LOG_KINDS = [["all", "すべて", null], ["review", "承認・却下・投票", ["approve", "reject", "vote_ok", "vote_ng"]], ["fix", "修正・取り消し", ["edit", "unapprove"]],
-    ["member", "メンバー", ["role", "ban", "unban", "exclude", "include"]], ["content", "シーズン・記事", ["season", "hero_note", "tier", "patch_add", "patch_edit", "patch_delete"]]];
+    ["member", "メンバー", ["role", "ban", "unban", "exclude", "include"]], ["content", "シーズン・記事", ["season", "hero_note", "tier", "patch_add", "patch_edit", "patch_delete", "gear_text"]]];
   function flagTags(f) { return (f || []).map(function (k) { return '<span class="tag warn rv-flag">要確認 · ' + esc(FLAG_JP[k] || k) + "</span>"; }).join(""); }
   function voteLine(m) {
     if (!m.flags || !m.flags.length) return "";
@@ -1923,6 +1977,11 @@
       case "patch_add": txt = "パッチ " + esc(d.version || "") + " を追加"; break;
       case "patch_edit": txt = "パッチ " + esc(d.version || "") + " を更新"; break;
       case "patch_delete": txt = "パッチ " + esc(d.version || "") + " を削除"; break;
+      case "gear_text":
+        var go = gearObj(d.kind, d.id), gf = ((GT_FIELDS[d.kind] || []).filter(function (f) { return f[0] === d.field; })[0] || [0, d.field])[1];
+        txt = '<a href="' + (d.kind === "item" ? "#item-" + esc(d.id) : d.kind === "spell" ? "#spells" : "#emblem") + '">' + esc(go ? go.name : d.id) + "</a> の" + esc(String(gf).replace(/\(.*$/, "")) + "を" + (d.after == null ? "元の文に戻した" : "書き換え");
+        more = '<details class="rv-diff"><summary>変更点</summary><div class="rv-note-diff"><p class="was">' + (esc(d.before || "") || "(元の文)") + "</p><p>" + (esc(d.after || "") || "(元の文)") + "</p></div></details>";
+        break;
       default: txt = esc(e.action);
     }
     return '<div class="rv-log-row"><span class="mono muted num">' + hm + '</span><span class="rv-log-who">' + esc(e.actor_name || "?") + (e.actor_role ? ' <span class="tag dim me-thin">' + esc(ROLE_JP[e.actor_role] || e.actor_role) + "</span>" : "") + '</span><span class="rv-log-what"><span>' + txt + "</span>" + more + "</span></div>";
@@ -2080,6 +2139,9 @@
     if (act === "rv-log-more") { loadLog(false); return; }
     if (act === "hn-edit") { var hb = document.getElementById(t.getAttribute("data-f") === "pc" ? "hn-pc" : "hn-pb"); if (hb) { hb.innerHTML = heroNoteEditor(t.getAttribute("data-f"), t.getAttribute("data-hero")); var ta0 = hb.querySelector("textarea"); if (ta0) ta0.focus(); } return; }
     if (act === "hn-save") { heroNoteSave(t); return; }
+    if (act === "gt-edit") { var gb = document.getElementById("gt-" + t.getAttribute("data-kind") + "-" + t.getAttribute("data-id")); if (gb) { gb.innerHTML = gtEditor(t.getAttribute("data-kind"), t.getAttribute("data-id")); var gta = gb.querySelector("textarea"); if (gta) gta.focus(); } return; }
+    if (act === "gt-save" || act === "gt-reset") { gtSave(t, act === "gt-reset"); return; }
+    if (act === "gt-cancel") { render(true); return; }
     if (act === "hn-cancel") { render(true); return; }
     if (act === "tl-lane") { S.tierLane = t.getAttribute("data-l"); document.getElementById("tl-box").innerHTML = tierListBox(); return; }
     if (act === "pt-new") { document.getElementById("pt-new-box").innerHTML = patchForm(); return; }
