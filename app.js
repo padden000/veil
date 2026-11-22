@@ -804,7 +804,7 @@
       var own = side === "ally";
       return '<div class="mlog-team ' + side + '"' + (own ? ' role="group" aria-label="味方 · 自分のヒーローを選ぶ"' : ' aria-label="敵"') + ">" + LANE_ORDER.map(function (L) {
         var c = CH[m[side][L]]; if (!c) return '<span class="mlog-h none"><span class="portrait sm"></span><span class="mono">' + L + "</span></span>";
-        var on = own && p === L, inner = portrait(c, true) + '<span class="mono">' + L + "</span>";
+        var its = m.items && m.items[side + ":" + L], on = own && p === L, inner = portrait(c, true) + '<span class="mono">' + L + "</span>" + (its && its.length ? '<span class="rv-items">' + its.map(tinyItem).join("") + "</span>" : "");
         return own ? '<button type="button" class="mlog-h' + (on ? " on" : "") + '" data-action="me-pick" data-k="' + i + '" data-lane="' + L + '" aria-pressed="' + on + '" title="' + esc(c.name) + " (" + L + ")" + (on ? " · 選択を外す" : " · 自分にする") + '">' + inner + (on ? "<b>YOU</b>" : "") + "</button>"
           : '<span class="mlog-h" title="' + esc(c.name) + " (" + L + ')">' + inner + "</span>";
       }).join("") + "</div>";
@@ -988,6 +988,7 @@
       S.myMatches = (res.data || []).filter(function (r) { return r.status === "approved"; }).map(function (r) {
         var m = { id: r.id, k: "d" + r.id, date: String(r.played_on), rank: r.rank, party: r.party, win: r.win, dur: r.duration_sec, ally: {}, enemy: {}, me: r.my_lane || null };
         Object.keys(r.picks || {}).forEach(function (k) { var a = k.split(":"); if (m[a[0]]) m[a[0]][a[1]] = r.picks[k]; });
+        (r.detail || []).forEach(function (d) { if (d.items && d.items.length) (m.items = m.items || {})[d.side + ":" + d.lane] = d.items; });
         return m;
       }).sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : a.id - b.id; });
       var h = (location.hash || "").replace(/^#/, "");
@@ -1136,11 +1137,13 @@
       '<span class="sub-kda" role="group" aria-label="' + (own ? "味方" : "敵") + "の" + L + 'のKDA">' + ["K", "D", "A"].map(function (x) { return '<input type="number" inputmode="numeric" min="0" max="99" placeholder="' + x + '" aria-label="' + x + '" data-kda="' + x + '">'; }).join("") + "</span><div class=\"sub-items\" id=\"" + id + "-items\" hidden></div></div>";
   }
   function viewSubmit() {
+    S.editId = null;
     var g = acctGate(), today = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
     var sel = function (id, label, opts, val) { return '<label class="sub-field"><span class="mono">' + label + '</span><select id="' + id + '">' + opts.map(function (o) { return '<option value="' + esc(o[0]) + '"' + (o[0] === val ? " selected" : "") + ">" + esc(o[1]) + "</option>"; }).join("") + "</select></label>"; };
     var last = S.subLast || {};
     return acctHead("SUBMIT", "試合を登録する", "SUBMIT") + '<section class="section tight"><div class="wrap" style="display:flex;flex-direction:column;gap:48px">' + (g ||
       '<form id="sub-form" class="sub-form" novalidate>' + heroDatalist() +
+        '<div id="sub-editing" class="sub-editing" hidden></div>' +
         '<div class="rec-box" id="rec-box"><div style="display:flex;flex-direction:column;gap:6px"><span class="mono gold" style="font-size:10px">SCREENSHOT · スクショから読み取る</span>' +
           '<span class="muted" style="font-size:13px">試合結果の画面のスクショを選ぶか、この画面に貼り付ける(Ctrl+V)と、10体・KDA・装備・戦闘番号・試合時間・勝敗を読み取って下に入れます。読み取りはこの端末の中だけで行い、プレイヤー名は読みません。</span></div>' +
           '<label class="btn ghost rec-pick"><input type="file" id="rec-file" accept="image/*" hidden>画像を選ぶ</label><div id="rec-status" class="sub-msg" role="status" aria-live="polite"></div></div>' +
@@ -1191,6 +1194,12 @@
       else if (v.some(function (x) { return x != null; })) errs.push((side === "ally" ? "味方" : "敵") + "の " + L + " のKDAは3つとも入れるか、空にしてください");
     });
     if (out.my_lane && !out.kda.ally[out.my_lane]) errs.push("自分のKDAを入れてください");
+    var items = { ally: {}, enemy: {} };
+    ["ally", "enemy"].forEach(function (side) { LANE_ORDER.forEach(function (L) {
+      var ids = [].map.call(f.querySelectorAll("#f-" + side + "-" + L + "-items select[data-item]"), function (x) { return x.value; }).filter(Boolean);
+      if (ids.length) items[side][L] = ids.slice(0, 6);
+    }); });
+    out.items = items;
     if (!errs.length) recPayload(out);
     return { payload: out, errs: errs };
   }
@@ -1225,6 +1234,7 @@
       grp("完成装備", G.items) + grp("中間・基本装備", G.parts);
   }
   function readShot(file) {
+    if (S.editId) endEdit();
     var st = document.getElementById("rec-status"); if (!st) return;
     if (!window.VEIL_RECOG) { st.className = "sub-msg bad"; st.textContent = "読み取りの準備ができていません。ページを読み込み直してください。"; return; }
     if (!file || !/^image\//.test(file.type)) { st.className = "sub-msg bad"; st.textContent = "画像ファイルを選んでください。"; return; }
@@ -1282,7 +1292,6 @@
           var it = r.items[Number(sel.getAttribute("data-item"))]; if (!sel.value) return;
           ids.push(sel.value); if (it && it.id !== sel.value) push("item", sel.value, it.img);
         });
-        if (ids.length) items[side][L] = ids;
         r.items.forEach(function (it) { if (it.badge && it.badge.lane && it.badge.lane !== L) push("badge", "none", it.badge.img); });
         var kv = (out.kda[side] || {})[L];
         if (kv) r.kda.forEach(function (cell, j) { var t = String(kv[j]); if (cell.glyphs.length !== t.length) return; cell.glyphs.forEach(function (g, n) { if (g.label !== t[n]) push("kda", t[n], g.img); }); });
@@ -1295,23 +1304,63 @@
       while (tt.length < a.time.glyphs.length) tt = "0" + tt;
       if (a.time.glyphs.length === tt.length) a.time.glyphs.forEach(function (g, n) { if (g.label !== tt[n]) push("time", tt[n], g.img); });
     }
-    out.items = items; if (icons.length) out.icons = icons;
+    if (icons.length) out.icons = icons;
+  }
+  /* ---- editing a match you sent, within an hour ---- */
+  function editLeft(created) { return Math.max(1, Math.ceil((new Date(created).getTime() + 3600e3 - Date.now()) / 60000)); }
+  function itemLine(side, L, ids) {
+    var row = []; for (var k = 0; k < 6; k++) row.push(ids[k] || "");
+    return row.map(function (id, k) { var src = itemSrc(id); return '<label class="rec-item"><img class="rec-cur" src="' + esc(src) + '" alt=""' + (src ? "" : " hidden") + '><span class="sr">' + (side === "ally" ? "味方" : "敵") + " " + L + " の装備" + (k + 1) + '</span><select data-item="' + k + '">' + recItemOptions(id) + "</select></label>"; }).join("");
+  }
+  function startEdit(id) {
+    var m = (S.mySubs || []).filter(function (x) { return String(x.id) === String(id); })[0], f = document.getElementById("sub-form");
+    if (!m || !f) return;
+    S.editId = m.id; S.rec = null;
+    var set = function (sel, v) { var e = f.querySelector(sel); if (e) e.value = v == null ? "" : v; };
+    set("#f-date", m.played_on); set("#f-rank", m.rank || ""); set("#f-stars", m.stars); set("#f-party", m.party || "Solo"); set("#f-battle", m.battle_id); set("#f-note", m.note);
+    set("#f-dur", m.duration_sec != null ? Math.floor(m.duration_sec / 60) + ":" + ("0" + m.duration_sec % 60).slice(-2) : "");
+    set("#f-season", m.season);
+    f.querySelectorAll('input[name="f-win"]').forEach(function (x) { x.checked = x.value === (m.win ? "1" : "0"); });
+    f.querySelectorAll('input[name="f-me"]').forEach(function (x) { x.checked = x.value === m.my_lane; });
+    var picks = m.detail || [];
+    f.querySelectorAll(".sub-row").forEach(function (row) {
+      var side = row.getAttribute("data-side"), L = row.getAttribute("data-lane"), p = picks.filter(function (x) { return x.side === side && x.lane === L; })[0] || {};
+      if (!p.hero && m.picks) p.hero = m.picks[side + ":" + L];
+      var inp = row.querySelector(".sub-hero"); inp.value = p.hero && CH[p.hero] ? CH[p.hero].name + " (" + CH[p.hero].en + ")" : ""; subFace(inp);
+      var ks = row.querySelectorAll("[data-kda]"), kv = [p.k, p.d, p.a]; if (!p.k && p.k !== 0 && p.me) kv = [m.k, m.d, m.a];
+      ks.forEach(function (x, j) { x.value = kv[j] == null ? "" : kv[j]; });
+      var box = document.getElementById("f-" + side + "-" + L + "-items"); box.innerHTML = itemLine(side, L, p.items || []); box.hidden = false;
+    });
+    var bn = document.getElementById("sub-editing");
+    bn.innerHTML = '<span><b>No.' + m.id + "</b> を編集中です(あと" + editLeft(m.created_at) + '分)。直したら「更新する」を押してください。' + (AUTH.role === "member" && m.status === "approved" ? "一般の人が直した試合は、もう一度承認待ちになります。" : "") + '</span><button class="chip" type="button" data-action="sub-edit-cancel" style="min-height:32px">やめる</button>';
+    bn.hidden = false;
+    var b = document.getElementById("sub-send"); if (b) b.innerHTML = "更新する" + IC.arrow;
+    var st = document.getElementById("rec-status"); if (st) st.textContent = "";
+    document.getElementById("sub-msg").textContent = "";
+    f.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+  function endEdit() {
+    S.editId = null;
+    var bn = document.getElementById("sub-editing"); if (bn) { bn.hidden = true; bn.innerHTML = ""; }
+    var b = document.getElementById("sub-send"); if (b) b.innerHTML = "登録する" + IC.arrow;
   }
   function sendForm() {
     var r = readForm(), msg = document.getElementById("sub-msg"), btn = document.getElementById("sub-send");
     if (r.errs.length) { msg.className = "sub-msg bad"; msg.innerHTML = r.errs.slice(0, 4).map(esc).join("<br>") + (r.errs.length > 4 ? "<br>ほか " + (r.errs.length - 4) + " 件" : ""); return; }
     btn.disabled = true; msg.className = "sub-msg"; msg.textContent = "送信中…";
-    SB.rpc("submit_match", { payload: r.payload }).then(function (res) {
+    var editing = S.editId;
+    (editing ? SB.rpc("update_match", { match_id: editing, payload: r.payload }) : SB.rpc("submit_match", { payload: r.payload })).then(function (res) {
       btn.disabled = false;
-      if (res.error) { msg.className = "sub-msg bad"; msg.textContent = dbErr(res.error); return; }
+      if (res.error) { msg.className = "sub-msg bad"; msg.textContent = /update_match/.test(res.error.message || "") ? "データベースの準備がまだです(db/edit_match.sql の実行が必要です)。" : dbErr(res.error); return; }
       var d = res.data || {};
+      if (editing) endEdit();
       S.subLast = { date: r.payload.played_on, rank: r.payload.rank, party: r.payload.party, season: r.payload.season, stars: r.payload.stars };
       S.myMatches = null;   /* My Page reloads your matches next time */
       if (S.rec && res.data) REC_READY = null;   /* new references may arrive once approved */
       S.rec = null; document.querySelectorAll(".sub-items").forEach(function (b) { b.hidden = true; b.innerHTML = ""; });
       var rs = document.getElementById("rec-status"); if (rs) rs.textContent = "";
       msg.className = "sub-msg ok";
-      msg.textContent = d.status === "approved" ? "登録しました(No." + d.id + ")。集計には15分ほどで反映されます。" : "登録しました(No." + d.id + ")。承認されると集計に入ります。" + (d.dup_of ? "同じ試合(No." + d.dup_of + ")がすでにあるので、運営が確認します。" : "");
+      msg.textContent = editing ? "No." + d.id + " を直しました。" + (d.status === "approved" ? "集計には15分ほどで反映されます。" : "承認されると集計に入ります。") : d.status === "approved" ? "登録しました(No." + d.id + ")。集計には15分ほどで反映されます。" : "登録しました(No." + d.id + ")。承認されると集計に入ります。" + (d.dup_of ? "同じ試合(No." + d.dup_of + ")がすでにあるので、運営が確認します。" : "");
       var f = document.getElementById("sub-form");
       f.querySelectorAll(".sub-hero, [data-kda], #f-note, #f-dur, #f-battle").forEach(function (x) { x.value = ""; if (x.classList.contains("sub-hero")) subFace(x); });
       f.querySelectorAll('input[name="f-win"], input[name="f-me"]').forEach(function (x) { x.checked = false; });
@@ -1323,8 +1372,15 @@
     return '<div class="rv-team ' + side + '">' + LANE_ORDER.map(function (L) {
       var p = picks.filter(function (x) { return x.side === side && x.lane === L; })[0] || {}, c = CH[p.hero];
       return '<span class="rv-h' + (p.me ? " me" : "") + '" title="' + esc((c ? c.name : p.hero || "?") + " (" + L + ")") + '">' + (c ? portrait(c, true) : '<span class="portrait sm"></span>') + '<span class="mono">' + L + "</span>" +
-        (p.k != null ? '<span class="num rv-kda">' + p.k + "/" + p.d + "/" + p.a + "</span>" : "") + (p.me ? "<b>" + (opts.meLabel || "YOU") + "</b>" : "") + "</span>";
+        (p.k != null ? '<span class="num rv-kda">' + p.k + "/" + p.d + "/" + p.a + "</span>" : "") + (p.me ? "<b>" + (opts.meLabel || "YOU") + "</b>" : "") +
+        (p.items && p.items.length ? '<span class="rv-items">' + p.items.map(tinyItem).join("") + "</span>" : "") + "</span>";
     }).join("") + "</div>";
+  }
+  /* a small item icon with its name on hover; "other" (not in the list) is an empty ring */
+  function itemSrc(id) { var G = window.VEIL_GEAR || {}, it = (G.items || {})[id] || (G.parts || {})[id]; return it ? (it.icon || "icons/i-" + id + ".webp") : ""; }
+  function tinyItem(id) {
+    var src = itemSrc(id);
+    return src ? '<img class="ti" src="' + esc(src) + '" alt="' + esc(itemName(id)) + '" title="' + esc(itemName(id)) + '" loading="lazy">' : '<span class="ti none" title="' + esc(itemName(id)) + '"></span>';
   }
   function loadSeason(done) {
     if (!SB) return;
@@ -1341,12 +1397,14 @@
       if (!document.getElementById("my-subs")) return;
       if (res.error) { box.innerHTML = '<p class="sub-msg bad">' + esc(dbErr(res.error)) + "</p>"; return; }
       var rows = res.data || [];
+      S.mySubs = rows;
       if (!rows.length) { box.innerHTML = '<p class="muted" style="font-size:14px">まだ登録した試合はありません。</p>'; return; }
       box.innerHTML = '<ol class="mlog">' + rows.map(function (m) {
-        var picks = Object.keys(m.picks || {}).map(function (k) { var a = k.split(":"); var me = a[0] === "ally" && a[1] === m.my_lane; return { side: a[0], lane: a[1], hero: m.picks[k], me: me, k: me ? m.k : null, d: me ? m.d : null, a: me ? m.a : null }; });
+        var picks = m.detail ? m.detail : Object.keys(m.picks || {}).map(function (k) { var a = k.split(":"); var me = a[0] === "ally" && a[1] === m.my_lane; return { side: a[0], lane: a[1], hero: m.picks[k], me: me, k: me ? m.k : null, d: me ? m.d : null, a: me ? m.a : null }; });
         return '<li class="mlog-row sub-mine"><div class="mlog-info"><span class="mono muted" style="font-size:10px">No.' + m.id + (m.season ? " · " + esc(m.season) : "") + (m.stars != null ? " · ★" + m.stars : "") + '</span><span class="num">' + esc(String(m.played_on).replace(/-/g, ".")) + '</span><span><span class="mlog-res ' + (m.win ? "w" : "l") + '">' + (m.win ? "WIN" : "LOSE") + '</span> <span class="tag ' + (m.status === "approved" ? "" : m.status === "rejected" ? "warn" : "dim") + '" style="font-size:9px;padding:2px 6px">' + STATUS_JP[m.status] + "</span></span>" +
           (m.reject_reason ? '<span class="muted" style="font-size:12px">理由: ' + esc(m.reject_reason) + "</span>" : "") +
-          (m.status !== "approved" ? '<button class="chip" type="button" data-action="sub-withdraw" data-id="' + m.id + '" style="min-height:32px;align-self:flex-start">取り下げる</button>' : "") + "</div>" +
+          '<span class="sub-btns">' + (m.editable ? '<button class="chip on-gold" type="button" data-action="sub-edit" data-id="' + m.id + '" style="min-height:32px">編集する <small class="muted">あと' + editLeft(m.created_at) + "分</small></button>" : "") +
+          (m.status !== "approved" ? '<button class="chip" type="button" data-action="sub-withdraw" data-id="' + m.id + '" style="min-height:32px">取り下げる</button>' : "") + "</span></div>" +
           teamFaces(picks, "ally") + '<span class="mono muted mlog-vs">VS</span>' + teamFaces(picks, "enemy") + "</li>";
       }).join("") + "</ol>";
     });
@@ -1477,6 +1535,14 @@
       t.textContent = "SKIN " + (A2.i + 1) + " / " + A2.n + " ↻"; return; }
     if (act === "login") { S.loginErr = ""; login(); return; }
     if (act === "logout") { logout(); return; }
+    if (act === "sub-edit") { startEdit(t.getAttribute("data-id")); return; }
+    if (act === "sub-edit-cancel") {
+      endEdit(); var ff = document.getElementById("sub-form");
+      if (ff) { ff.querySelectorAll(".sub-hero, [data-kda], #f-note, #f-dur, #f-battle, #f-stars").forEach(function (x) { x.value = ""; if (x.classList.contains("sub-hero")) subFace(x); });
+        ff.querySelectorAll('input[name="f-win"], input[name="f-me"]').forEach(function (x) { x.checked = false; });
+        ff.querySelectorAll(".sub-items").forEach(function (b) { b.hidden = true; b.innerHTML = ""; }); }
+      return;
+    }
     if (act === "av-set") { saveAvatar(t.getAttribute("data-v") || ""); return; }
     if (act === "av-hero") { var avi = document.getElementById("av-hero"), avh = avi && heroFromInput(avi.value); if (!avh) { var am = document.getElementById("av-msg"); if (am) { am.className = "sub-msg bad"; am.textContent = "ヒーロー名が見つかりません。候補から選んでください。"; } return; } saveAvatar("hero:" + avh); return; }
     if (act === "sub-withdraw") { t.disabled = true; SB.rpc("withdraw_match", { match_id: Number(t.getAttribute("data-id")) }).then(function (res) { if (res.error) { t.disabled = false; t.textContent = dbErr(res.error); } else loadMySubs(); }); return; }
@@ -1584,6 +1650,7 @@
   document.addEventListener("change", function (ev) {
     var t = ev.target, b = t.getAttribute("data-bind");
     if (b === "cf-sort") { S.cf.sort = t.value; document.getElementById("champ-grid").innerHTML = champGrid(); }
+    if (t.matches && t.matches(".rec-item select")) { var ci = t.parentNode.querySelector("img.rec-cur"); if (ci) { var cs = itemSrc(t.value); ci.src = cs; ci.hidden = !cs; } }
     if (t.id === "rec-file") { if (t.files && t.files[0]) readShot(t.files[0]); t.value = ""; return; }
     if (t.hasAttribute && t.hasAttribute("data-hero-input")) { var hid2 = heroFromInput(t.value); if (hid2) t.value = CH[hid2].name + " (" + CH[hid2].en + ")"; subFace(t); return; }
     if (t.classList && t.classList.contains("rv-role")) { t.disabled = true; SB.rpc("set_role", { target: t.getAttribute("data-uid"), new_role: t.value }).then(function (res) { t.disabled = false; if (res.error) { var e2 = document.createElement("span"); e2.className = "sub-msg bad"; e2.textContent = dbErr(res.error); t.parentNode.appendChild(e2); loadReview(); } }); return; }

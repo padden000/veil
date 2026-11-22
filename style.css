@@ -741,3 +741,15 @@ button.mlog-h:focus-visible { outline: 1px solid var(--gold); outline-offset: 1p
 .av-hero input { flex: 1 1 220px; min-width: 0; }
 .mem-name { display: inline-flex; align-items: center; gap: 8px; }
 @media (max-width: 480px) { .av-opt { width: calc(33.33% - 7px); } .acct-av { padding: 18px 14px; } }
+
+/* ---------- items under each face (my submissions, review) + editing a sent match ---------- */
+.rv-items { display: grid; grid-template-columns: repeat(3, 18px); gap: 1px; justify-content: center; min-height: 18px; }
+.rv-items .ti { width: 18px; height: 18px; border-radius: 50%; display: block; }
+.rv-items .ti.none { border: 1px solid var(--line); box-sizing: border-box; }
+.sub-btns { display: flex; flex-wrap: wrap; gap: 8px; align-self: flex-start; }
+.sub-btns small { font-size: 10px; margin-left: 4px; }
+.sub-editing { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 18px; border: 1px solid var(--gold);
+  background: rgba(185,154,104,.08); font-size: 13px; color: var(--text); line-height: 1.7; }
+.sub-editing[hidden] { display: none; }
+.rec-item img.rec-cur[hidden] { display: none; }
+@media (max-width: 480px) { .rv-items { grid-template-columns: repeat(3, 12px); } .rv-items .ti { width: 12px; height: 12px; } }
