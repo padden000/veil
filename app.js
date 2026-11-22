@@ -307,7 +307,7 @@
       '<button class="btn primary" type="button" data-action="lab-from" data-id="' + c.id + '">対面を選ぶ' + IC.arrow + "</button></div>" +
       '<div class="ov-tags">' + ((window.VEIL_OVERVIEW || {})[c.id] || { tags: [] }).tags.map(function (t, i) { return '<span class="tag' + (i ? " dim" : "") + '">' + esc(t) + "</span>"; }).join("") + "</div>" +
       '<div class="ov-grid"><div class="ov-rates"><span class="mono gold" style="font-size:10px">使われたレーン</span>' + (function () { var ST = (window.VEIL_STATS || {})[c.id] || { lane: {}, all: { games: 0 } }; return D.roles.map(function (r) { var x = ST.lane[r.id], n = x ? x.games : 0; return '<div class="rate"><span>' + r.id + '</span><span class="track"><i style="width:' + (ST.all.games ? Math.round(n / ST.all.games * 100) : 0) + '%"></i></span><span class="mono num">' + n + "</span></div>"; }).join(""); })() + '<span class="muted" style="font-size:11px">記録した試合で、そのレーンで使われた回数です</span></div>' +
-      '<div class="ov-pc"><div><span class="mono gold" style="font-size:10px">長所</span><p class="muted" style="font-size:13px">準備中</p></div><div><span class="mono" style="font-size:10px;color:var(--redtext)">短所</span><p class="muted" style="font-size:13px">準備中</p></div></div></div>' +
+      heroProsCons(c) + "</div>" +
       '<div class="ov-syn" id="role-syn">' + roleSynergy(c) + "</div></div>" +
 
       '<div class="block" ' + P("sec-skills") + '><h2>SKILLS <small>スキル</small></h2><div>' + skillSlots + "</div></div>" +
@@ -322,7 +322,7 @@
 
       '<div class="block" ' + P("sec-stats") + '><h2>STATISTICS <small>統計</small></h2><div id="stats-box" style="display:flex;flex-direction:column;gap:18px">' + statsBox(c) + "</div></div>" +
 
-      '<div class="block" ' + P("sec-guide") + '><h2>PLAYBOOK <small>立ち回り</small></h2>' + prep("基本の立ち回り・レーン戦・集団戦・よくあるミスを、ここに書きます。") + "</div>" +
+      '<div class="block" ' + P("sec-guide") + '><h2>PLAYBOOK <small>立ち回り</small></h2>' + heroPlaybook(c) + "</div>" +
 
       '<div class="block" ' + P("sec-skins") + '><h2>SKINS <small>スキン</small></h2>' + skins + "</div>" +
 
@@ -330,7 +330,7 @@
 
       adSlot("champion-data", "box") +
 
-      '<div class="byline"><span class="portrait sm" style="color:var(--gold)">' + LOGO + '</span><div style="display:flex;flex-direction:column;gap:2px"><span class="mono muted" style="font-size:10px">執筆・監修</span><span class="mincho" style="font-size:16px">' + esc(window.VEIL_EXTRA.author.name) + '</span><span class="muted" style="font-size:12px">' + esc(window.VEIL_EXTRA.author.note) + "</span></div></div></div>" +
+      heroByline(c) + "</div>" +
 
       '<aside class="daside"><div class="block"><h2 style="font-size:26px">STATUS <small>性能</small></h2>' + prep("HP・攻撃・防御・移動速度などの実際の数値を、全ヒーロー中の位置と一緒に表示します。") + "</div>" +
       '<div class="block"><h2 style="font-size:26px">SAME CLASS <small>同じクラス</small></h2><div class="side-list">' + same + "</div></div></aside></div></div></section>";
@@ -640,7 +640,7 @@
 
   function roleFacts(c) {
     var rs = roleSet(c), r = curRole(c), d = rs ? rs[r] : { wr: c.wr, pick: c.pick, games: c.games };
-    return '<div><span class="mono muted" style="font-size:10px">TIER</span><span class="tag dim">データ待ち</span></div>' +
+    return '<div><span class="mono muted" style="font-size:10px">TIER</span>' + tierCell(c, r) + "</div>" +
       '<div><span class="mono muted" style="font-size:10px">レーン</span><span class="serif" style="font-size:19px">' + laneLabel(r) + '</span></div>' +
       '<div><span class="mono muted" style="font-size:10px">クラス</span><span class="mincho" style="font-size:16px">' + esc(c.attr) + "</span></div>" +
       '<div><span class="mono muted" style="font-size:10px">試合数</span><span class="serif num" style="font-size:24px">' + (d.games || 0) + "</span></div>" +
@@ -721,8 +721,8 @@
       '<div class="phead-row"><div style="display:flex;flex-direction:column;gap:14px"><h1 class="rise">PATCH &amp; META</h1><p class="jp rise d1">環境とVEILの集計</p></div>' +
       '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px"><span class="serif num" style="font-size:56px;line-height:1">' + (MI.count || 0) + ' <span class="muted" style="font-size:22px">試合</span></span><span class="mono muted num">' + (MI.from ? MI.from.replace(/-/g, ".") + " 〜 " + MI.to.replace(/-/g, ".") : "") + "</span></div></div></div></section>" +
       '<section class="section tight"><div class="wrap" style="display:flex;flex-direction:column;gap:88px">' +
-      "<div>" + secHead("01", "PATCH", "最新パッチ") + '<div class="empty" style="padding:48px 28px"><span class="tag dim">準備中</span><h3>パッチ情報は準備中です</h3><p class="muted" style="font-size:14px">強化・弱体化の内容を、パッチごとにここへまとめます。</p></div></div>' +
-      "<div>" + secHead("02", "TIER LIST", "ロール別Tier List") + '<div class="empty" style="padding:48px 28px"><span class="tag dim">データ待ち</span><h3>Tierを決めるには試合数が足りません</h3><p class="muted" style="font-size:14px">試合が集まったら、勝率と使用率からTierを出します。</p></div></div>' +
+      "<div>" + secHead("01", "PATCH", "パッチノート") + '<div id="pt-box">' + patchListBox() + "</div></div>" +
+      "<div>" + secHead("02", "TIER LIST", "ロール別Tier List") + '<div id="tl-box">' + tierListBox() + "</div></div>" +
       "<div>" + secHead("03", "STATISTICS", "ヒーロー別の勝率", '<span class="badge" style="order:2">VEIL集計</span>') +
       '<div style="display:flex;flex-direction:column;gap:18px"><div class="fgroup" role="group" aria-label="レーンで絞り込む">' + chips("meta-role", [["ALL", "ALL"]].concat(D.roles.map(function (r) { return [r.id, r.id]; })), S.meta.role) +
       '</div><p class="muted" style="font-size:12px">記録した試合に登場したヒーローだけを載せています。使用率 = 登場した試合 ÷ 記録した全試合。</p><div class="table-box" id="meta-table">' + metaTable() + "</div></div></div></div></section>";
@@ -1024,6 +1024,161 @@
       "</div></section>";
   }
 
+  /* ---------------- written content: ヒーロー解説 · TIER · パッチ (read by everyone, written by 運営 / 管理者) ---------------- */
+  var CT = { notes: {}, tiers: {}, patches: [], ready: false, missing: false };
+  function loadContent() {
+    if (!SB) return;
+    Promise.all([
+      SB.from("hero_notes").select("hero,strengths,weaknesses,playbook,editor_name,updated_at"),
+      SB.from("hero_tiers").select("hero,lane,tier,editor_name,updated_at"),
+      SB.from("patch_notes").select("id,version,released_on,title,body,changes,editor_name,updated_at").order("released_on", { ascending: false }).order("id", { ascending: false })
+    ]).then(function (x) {
+      if (x[0].error || x[1].error || x[2].error) { CT.missing = true; CT.ready = true; return; }
+      CT.notes = {}; (x[0].data || []).forEach(function (n) { CT.notes[n.hero] = n; });
+      CT.tiers = {}; (x[1].data || []).forEach(function (r) { CT.tiers[r.hero + "|" + r.lane] = r; });
+      CT.patches = x[2].data || []; CT.ready = true;
+      var h = (location.hash || "").replace(/^#/, "");
+      if (/^champion-/.test(h) || h === "patch") softRender();
+    }).catch(function () { CT.missing = true; CT.ready = true; });
+  }
+  /* plain text → paragraphs; lines starting with ・ or - become a list */
+  function fmtText(s) {
+    return String(s || "").trim().split(/\n\s*\n/).map(function (blk) {
+      var lines = blk.split("\n");
+      if (lines.every(function (l) { return /^\s*[-・*]\s?/.test(l); })) return '<ul class="fmt-list">' + lines.map(function (l) { return "<li>" + esc(l.replace(/^\s*[-・*]\s?/, "")) + "</li>"; }).join("") + "</ul>";
+      return "<p>" + lines.map(esc).join("<br>") + "</p>";
+    }).join("");
+  }
+  function noteOf(id) { return CT.notes[id] || null; }
+  function editBtn(f, id, label) { return canManage() && !CT.missing ? '<button class="chip hn-edit" type="button" data-action="hn-edit" data-f="' + f + '" data-hero="' + id + '">' + (label || "編集") + "</button>" : ""; }
+  function heroProsCons(c) {
+    var n = noteOf(c.id) || {};
+    return '<div class="ov-pc" id="hn-pc">' + editBtn("pc", c.id) + '<div><span class="mono gold" style="font-size:10px">長所</span>' + (n.strengths ? '<div class="fmt" style="font-size:13px">' + fmtText(n.strengths) + "</div>" : '<p class="muted" style="font-size:13px">準備中</p>') + "</div>" +
+      '<div><span class="mono" style="font-size:10px;color:var(--redtext)">短所</span>' + (n.weaknesses ? '<div class="fmt" style="font-size:13px">' + fmtText(n.weaknesses) + "</div>" : '<p class="muted" style="font-size:13px">準備中</p>') + "</div></div>";
+  }
+  function heroPlaybook(c) {
+    var n = noteOf(c.id) || {};
+    return '<div id="hn-pb">' + (n.playbook ? '<div class="fmt">' + fmtText(n.playbook) + "</div>"
+      : '<div class="slot" style="min-height:120px"><span class="mono muted" style="font-size:10px">準備中</span><span class="muted" style="font-size:13px">基本の立ち回り・レーン戦・集団戦・よくあるミスを、ここに書きます。</span></div>') +
+      (canManage() && !CT.missing ? '<div style="margin-top:12px">' + editBtn("pb", c.id, n.playbook ? "立ち回りを編集" : "立ち回りを書く") + "</div>" : "") + "</div>";
+  }
+  function heroByline(c) {
+    var n = noteOf(c.id), A = window.VEIL_EXTRA.author;
+    var name = n && n.editor_name ? n.editor_name : A.name, sub = n && n.editor_name ? "最終更新 " + String(n.updated_at).slice(0, 10).replace(/-/g, ".") : A.note;
+    return '<div class="byline"><span class="portrait sm" style="color:var(--gold)">' + LOGO + '</span><div style="display:flex;flex-direction:column;gap:2px"><span class="mono muted" style="font-size:10px">執筆・監修</span><span class="mincho" style="font-size:16px">' + esc(name) + '</span><span class="muted" style="font-size:12px">' + esc(sub) + "</span></div></div>";
+  }
+  function heroNoteEditor(f, id) {
+    var n = noteOf(id) || {}, ta = function (k, label, rows, max) { return '<label class="sub-field hn-field"><span class="mono">' + label + '</span><textarea data-k="' + k + '" rows="' + rows + '" maxlength="' + max + '">' + esc(n[k] || "") + "</textarea></label>"; };
+    return '<div class="hn-editor" data-f="' + f + '" data-hero="' + id + '">' + (f === "pc" ? ta("strengths", "長所", 4, 1500) + ta("weaknesses", "短所", 4, 1500) : ta("playbook", "立ち回り", 12, 8000)) +
+      '<p class="muted" style="font-size:12px">空行で段落が分かれます。行の頭に「・」か「-」を付けると箇条書きになります。保存すると全員に公開され、作業の記録に残ります。</p>' +
+      '<div class="sub-actions"><button class="chip on-gold" type="button" data-action="hn-save">保存する</button><button class="chip" type="button" data-action="hn-cancel">やめる</button><span class="sub-msg" role="status" aria-live="polite"></span></div></div>';
+  }
+  function heroNoteSave(btn) {
+    var ed = btn.closest(".hn-editor"), id = ed.getAttribute("data-hero"), payload = {}, msg = ed.querySelector(".sub-msg");
+    ed.querySelectorAll("textarea").forEach(function (x) { payload[x.getAttribute("data-k")] = x.value.replace(/\s+$/, ""); });
+    btn.disabled = true; msg.className = "sub-msg"; msg.textContent = "保存しています…";
+    SB.rpc("save_hero_note", { hero: id, payload: payload }).then(function (res) {
+      btn.disabled = false;
+      if (res.error) { msg.className = "sub-msg bad"; msg.textContent = dbErr(res.error); return; }
+      var n = CT.notes[id] = Object.assign(CT.notes[id] || { hero: id, strengths: "", weaknesses: "", playbook: "" }, payload, { editor_name: AUTH.name || (CT.notes[id] || {}).editor_name || "", updated_at: new Date().toISOString() });
+      render(true);
+    });
+  }
+
+  /* TIER: a 運営's setting for the hero in that lane, otherwise worked out from the record:
+     heroes with at least TIER_MIN games in the lane, ranked by win rate pulled toward 50% (wins+5)/(games+10):
+     top 10% S, next 20% A, next 40% B, next 20% C, the rest D (needs 5 heroes in the lane) */
+  var TIER_MIN = 10, TIERS = ["S", "A", "B", "C", "D"];
+  function autoTiers(lane) {
+    var ST = window.VEIL_STATS || {}, list = [];
+    Object.keys(ST).forEach(function (id) { var x = ST[id].lane && ST[id].lane[lane]; if (x && x.games >= TIER_MIN && CH[id]) list.push({ id: id, s: (x.wins + 5) / (x.games + 10) }); });
+    if (list.length < 5) return {};
+    list.sort(function (a, b) { return b.s - a.s; });
+    var out = {}; list.forEach(function (x, i) { var q = i / list.length; out[x.id] = q < .1 ? "S" : q < .3 ? "A" : q < .7 ? "B" : q < .9 ? "C" : "D"; });
+    return out;
+  }
+  function tierOf(id, lane) {
+    var m = CT.tiers[id + "|" + lane]; if (m) return { tier: m.tier, src: "manual", by: m.editor_name };
+    var a = autoTiers(lane)[id]; return a ? { tier: a, src: "auto" } : null;
+  }
+  function tierBadge(t, big) { return t ? '<span class="tier-b tier-' + t.tier + (big ? " big" : "") + '" title="' + (t.src === "manual" ? "運営が設定" + (t.by ? "(" + esc(t.by) + ")" : "") : "記録から自動で決めたTIER") + '">' + t.tier + "</span>" : ""; }
+  function tierCell(c, lane) {
+    var t = tierOf(c.id, lane), man = CT.tiers[c.id + "|" + lane];
+    var view = t ? tierBadge(t, true) + '<span class="mono muted" style="font-size:9px">' + (t.src === "manual" ? "運営が設定" : "自動") + "</span>" : '<span class="tag dim">データ待ち</span>';
+    if (!canManage() || CT.missing) return view;
+    return '<span class="tier-cell">' + view + '<label class="sr" for="hn-tier">' + esc(c.name) + "(" + lane + ")のTIER</label><select id=\"hn-tier\" class=\"hn-tier\" data-hero=\"" + c.id + '" data-lane="' + lane + '"><option value="">自動</option>' + TIERS.map(function (k) { return '<option value="' + k + '"' + (man && man.tier === k ? " selected" : "") + ">" + k + "</option>"; }).join("") + "</select></span>";
+  }
+  function tierSave(sel) {
+    var id = sel.getAttribute("data-hero"), lane = sel.getAttribute("data-lane"), v = sel.value || null; sel.disabled = true;
+    SB.rpc("set_hero_tier", { hero: id, lane: lane, tier: v }).then(function (res) {
+      sel.disabled = false;
+      if (res.error) { var e = document.createElement("span"); e.className = "sub-msg bad"; e.textContent = dbErr(res.error); sel.parentNode.appendChild(e); return; }
+      if (v) CT.tiers[id + "|" + lane] = { hero: id, lane: lane, tier: v, editor_name: AUTH.name || "" }; else delete CT.tiers[id + "|" + lane];
+      render(true);
+    });
+  }
+  function tierListBox() {
+    var lane = S.tierLane || "EXP", groups = {}, any = false;
+    TIERS.forEach(function (k) { groups[k] = []; });
+    D.champions.forEach(function (c) { var t = tierOf(c.id, lane); if (t) { groups[t.tier].push({ c: c, t: t }); any = true; } });
+    return '<div class="fgroup" role="group" aria-label="レーン" style="margin-bottom:18px">' + D.roles.map(function (r) { return '<button type="button" class="chip" data-action="tl-lane" data-l="' + r.id + '" aria-pressed="' + (r.id === lane) + '">' + esc(r.label) + "</button>"; }).join("") + "</div>" +
+      (!any ? '<div class="empty" style="padding:48px 28px"><span class="tag dim">データ待ち</span><h3>このレーンはまだTIERを決められません</h3><p class="muted" style="font-size:14px">そのレーンで' + TIER_MIN + "試合以上のヒーローが5体集まると、勝率から自動で出します。" + (canManage() ? "運営はヒーローのページで手動で決めることもできます。" : "") + "</p></div>"
+      : '<div class="tierlist">' + TIERS.map(function (k) {
+        return '<div class="tl-row"><span class="tier-b tier-' + k + ' big">' + k + '</span><div class="tl-heroes">' + (groups[k].length ? groups[k].map(function (x) { return '<a class="tl-h" href="#champion-' + x.c.id + '" title="' + esc(x.c.name) + (x.t.src === "manual" ? "(運営が設定)" : "") + '">' + portrait(x.c, true) + '<span class="mincho">' + esc(x.c.name) + "</span>" + (x.t.src === "manual" ? '<i class="tl-man" aria-label="運営が設定">運営</i>' : "") + "</a>"; }).join("") : '<span class="muted" style="font-size:12px">—</span>') + "</div></div>";
+      }).join("") + "</div>" + '<p class="muted" style="font-size:12px;margin-top:12px">自動のTIERは、そのレーンで' + TIER_MIN + "試合以上のヒーローを、勝率(試合数が少ないほど50%に寄せた値)の順に S 10% / A 20% / B 40% / C 20% / D 10% に分けています。「運営」の印は運営が決めたものです。</p>");
+  }
+
+  /* PATCH */
+  var PK = { buff: ["強化", "up"], nerf: ["弱体化", "down"], adjust: ["調整", "adj"], "new": ["新ヒーロー", "new"] };
+  function patchListBox() {
+    var head = canManage() && !CT.missing ? '<div style="margin-bottom:20px"><button class="chip on-gold" type="button" data-action="pt-new">パッチを追加する</button></div><div id="pt-new-box"></div>' : "";
+    if (CT.missing || !CT.patches.length) return head + '<div class="empty" style="padding:48px 28px"><span class="tag dim">準備中</span><h3>パッチ情報は準備中です</h3><p class="muted" style="font-size:14px">強化・弱体化の内容を、パッチごとにここへまとめます。</p></div>';
+    return head + '<div class="patches">' + CT.patches.map(patchCard).join("") + "</div>";
+  }
+  function patchCard(p) {
+    var groups = {}; (p.changes || []).forEach(function (x) { (groups[x.kind] = groups[x.kind] || []).push(x); });
+    return '<article class="patch" id="pt-' + p.id + '"><header class="patch-head"><span class="tag">' + esc(p.version) + '</span><span class="mono muted num">' + esc(String(p.released_on).replace(/-/g, ".")) + "</span>" +
+      (canManage() ? '<span class="rv-btns" style="margin-left:auto"><button class="chip" type="button" data-action="pt-edit" data-id="' + p.id + '">編集</button><button class="chip" type="button" data-action="pt-del" data-id="' + p.id + '">削除</button></span>' : "") + (p.title ? '<h3 class="mincho">' + esc(p.title) + "</h3>" : "") + "</header>" +
+      (p.body ? '<div class="fmt">' + fmtText(p.body) + "</div>" : "") +
+      Object.keys(PK).filter(function (k) { return groups[k]; }).map(function (k) {
+        return '<div class="patch-group"><span class="mono pk-' + PK[k][1] + '" style="font-size:10px">' + PK[k][0] + '</span><ul class="patch-ch">' + groups[k].map(function (x) { var c = CH[x.hero]; return "<li>" + (c ? '<a href="#champion-' + c.id + '" class="patch-h">' + portrait(c, true) + '<span class="mincho">' + esc(c.name) + "</span></a>" : esc(x.hero)) + (x.text ? '<span class="patch-t">' + esc(x.text) + "</span>" : "") + "</li>"; }).join("") + "</ul></div>";
+      }).join("") + (p.editor_name ? '<p class="mono muted" style="font-size:10px">編集: ' + esc(p.editor_name) + "</p>" : "") + "</article>";
+  }
+  function patchForm(p) {
+    p = p || { version: "", released_on: new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10), title: "", body: "", changes: [] };
+    return '<form class="patch-form" data-form="patch" data-id="' + (p.id || "") + '">' + heroDatalist() +
+      '<div class="patch-row"><label class="sub-field"><span class="mono">バージョン</span><input name="version" maxlength="20" required placeholder="例: 1.9.42" value="' + esc(p.version) + '"></label>' +
+      '<label class="sub-field"><span class="mono">日付</span><input type="date" name="released_on" required value="' + esc(p.released_on) + '"></label>' +
+      '<label class="sub-field" style="flex:1 1 260px"><span class="mono">見出し</span><input name="title" maxlength="80" placeholder="例: アーロット強化、新ヒーロー追加" value="' + esc(p.title) + '"></label></div>' +
+      '<label class="sub-field"><span class="mono">本文</span><textarea name="body" rows="6" maxlength="8000" placeholder="全体の変更やメタへの影響など">' + esc(p.body) + "</textarea></label>" +
+      '<div class="sub-field"><span class="mono">ヒーローごとの変更</span><div class="pt-changes">' + (p.changes || []).map(changeRow).join("") + '</div><button class="chip" type="button" data-action="pt-add-ch" style="align-self:flex-start">変更を1行足す</button></div>' +
+      '<div class="sub-actions"><button class="chip on-gold" type="submit">保存する</button><button class="chip" type="button" data-action="pt-cancel">やめる</button><span class="sub-msg" role="status" aria-live="polite"></span></div></form>';
+  }
+  function changeRow(x) {
+    x = x || { hero: "", kind: "buff", text: "" }; var c = CH[x.hero];
+    return '<div class="pt-ch"><input class="pt-hero" list="hero-names" data-hero-input aria-label="ヒーロー" placeholder="ヒーロー名" value="' + esc(c ? c.name + " (" + c.en + ")" : "") + '">' +
+      '<select class="pt-kind" aria-label="種類">' + Object.keys(PK).map(function (k) { return '<option value="' + k + '"' + (x.kind === k ? " selected" : "") + ">" + PK[k][0] + "</option>"; }).join("") + "</select>" +
+      '<input class="pt-text" maxlength="300" aria-label="内容" placeholder="例: 2のダメージ 300→340" value="' + esc(x.text || "") + '"><button class="chip" type="button" data-action="pt-rm-ch" aria-label="この行を消す">×</button></div>';
+  }
+  function patchSave(form) {
+    var id = form.getAttribute("data-id") ? Number(form.getAttribute("data-id")) : null, msg = form.querySelector(".sub-msg"), errs = [];
+    var payload = { version: form.version.value.trim(), released_on: form.released_on.value, title: form.title.value.trim(), body: form.body.value.replace(/\s+$/, ""), changes: [] };
+    if (!payload.version) errs.push("バージョンを入れてください"); if (!payload.released_on) errs.push("日付を入れてください");
+    form.querySelectorAll(".pt-ch").forEach(function (r, i) {
+      var hv = r.querySelector(".pt-hero").value, h = heroFromInput(hv), tx = r.querySelector(".pt-text").value.trim();
+      if (!hv && !tx) return;
+      if (!h) { errs.push((i + 1) + "行目のヒーローが見つかりません"); return; }
+      payload.changes.push({ hero: h, kind: r.querySelector(".pt-kind").value, text: tx });
+    });
+    if (errs.length) { msg.className = "sub-msg bad"; msg.innerHTML = errs.map(esc).join("<br>"); return; }
+    var btn = form.querySelector('[type="submit"]'); btn.disabled = true; msg.className = "sub-msg"; msg.textContent = "保存しています…";
+    SB.rpc("save_patch", { id: id, payload: payload }).then(function (res) {
+      btn.disabled = false;
+      if (res.error) { msg.className = "sub-msg bad"; msg.textContent = dbErr(res.error); return; }
+      S.ptEditing = null; loadContent();
+    });
+  }
+
   /* ---------------- ACCOUNT · SUBMIT · REVIEW (Supabase) ----------------
      Login is Discord through Supabase Auth: the site never sees or stores a password.
      All writes go through database functions (submit_match, review_match, set_role …) that check the user's role. */
@@ -1311,7 +1466,7 @@
     var st = f.querySelector("#f-stars").value.trim();
     if (st !== "") { if (!/^\d{1,4}$/.test(st)) errs.push("星の数は0〜9999の数字で入れてください"); else out.stars = Number(st); }
     var w = f.querySelector('input[name="f-win"]:checked'); if (!w) errs.push("勝ち・負けを選んでください"); else out.win = w.value === "1";
-    var me = f.querySelector('input[name="f-me"]:checked'); if (!me) errs.push("味方のうち、自分のヒーローを選んでください"); else out.my_lane = me.value;
+    var me = f.querySelector('input[name="f-me"]:checked'); if (!me) { if (!S.editStaff) errs.push("味方のうち、自分のヒーローを選んでください"); } else out.my_lane = me.value;
     var dur = f.querySelector("#f-dur").value.trim(), dm = dur.match(/^(\d{1,2})[:：](\d{2})$/);
     if (dur && !dm) errs.push("試合時間は 14:22 のように「分:秒」で入れてください"); else if (dm) out.duration_sec = Number(dm[1]) * 60 + Number(dm[2]);
     if (!out.played_on) errs.push("日付を入れてください");
@@ -1324,7 +1479,7 @@
       if (v.every(function (x) { return x != null; })) { if (v.some(function (x) { return !(x >= 0 && x <= 99 && Math.floor(x) === x); })) errs.push((side === "ally" ? "味方" : "敵") + "の " + L + " のKDAは0〜99の整数で入れてください"); else out.kda[side][L] = v; }
       else if (v.some(function (x) { return x != null; })) errs.push((side === "ally" ? "味方" : "敵") + "の " + L + " のKDAは3つとも入れるか、空にしてください");
     });
-    if (out.my_lane && !out.kda.ally[out.my_lane]) errs.push("自分のKDAを入れてください");
+    if (out.my_lane && !out.kda.ally[out.my_lane] && !S.editStaff) errs.push("自分のKDAを入れてください");
     var items = { ally: {}, enemy: {} };
     ["ally", "enemy"].forEach(function (side) { LANE_ORDER.forEach(function (L) {
       var ids = [].map.call(f.querySelectorAll("#f-" + side + "-" + L + "-items select[data-item]"), function (x) { return x.value; }).filter(Boolean);
@@ -1444,10 +1599,10 @@
     var row = []; for (var k = 0; k < 6; k++) row.push(ids[k] || "");
     return row.map(function (id, k) { var src = itemSrc(id); return '<label class="rec-item"><img class="rec-cur" src="' + esc(src) + '" alt=""' + (src ? "" : " hidden") + '><span class="sr">' + (side === "ally" ? "味方" : "敵") + " " + L + " の装備" + (k + 1) + '</span><select data-item="' + k + '">' + recItemOptions(id) + "</select></label>"; }).join("");
   }
-  function startEdit(id) {
-    var m = (S.mySubs || []).filter(function (x) { return String(x.id) === String(id); })[0], f = document.getElementById("sub-form");
+  function startEdit(id, given, staff) {
+    var m = given || (S.mySubs || []).filter(function (x) { return String(x.id) === String(id); })[0], f = document.getElementById("sub-form");
     if (!m || !f) return;
-    S.editId = m.id; S.rec = null;
+    S.editId = m.id; S.editStaff = !!staff; S.rec = null;
     var set = function (sel, v) { var e = f.querySelector(sel); if (e) e.value = v == null ? "" : v; };
     set("#f-date", m.played_on); set("#f-rank", m.rank || ""); set("#f-stars", m.stars); set("#f-party", m.party || "Solo"); set("#f-battle", m.battle_id); set("#f-note", m.note);
     set("#f-dur", m.duration_sec != null ? Math.floor(m.duration_sec / 60) + ":" + ("0" + m.duration_sec % 60).slice(-2) : "");
@@ -1464,7 +1619,8 @@
       var box = document.getElementById("f-" + side + "-" + L + "-items"); box.innerHTML = itemLine(side, L, p.items || []); box.hidden = false;
     });
     var bn = document.getElementById("sub-editing");
-    bn.innerHTML = '<span><b>No.' + m.id + "</b> を編集中です(あと" + editLeft(m.created_at) + '分)。直したら「更新する」を押してください。' + (AUTH.role === "member" && m.status === "approved" ? "一般の人が直した試合は、もう一度承認待ちになります。" : "") + '</span><button class="chip" type="button" data-action="sub-edit-cancel" style="min-height:32px">やめる</button>';
+    bn.innerHTML = staff ? '<span><b>運営として No.' + m.id + "</b>(登録: " + esc(m.submitter || "?") + ")を直しています。登録した人と承認の状態(" + esc(STATUS_JP[m.status] || m.status) + ')はそのままです。直したら「更新する」を押してください。変更は作業の記録に残ります。</span><button class="chip" type="button" data-action="sub-edit-cancel" style="min-height:32px">やめる</button>'
+      : '<span><b>No.' + m.id + "</b> を編集中です(あと" + editLeft(m.created_at) + '分)。直したら「更新する」を押してください。' + (AUTH.role === "member" && m.status === "approved" ? "一般の人が直した試合は、もう一度承認待ちになります。" : "") + '</span><button class="chip" type="button" data-action="sub-edit-cancel" style="min-height:32px">やめる</button>';
     bn.hidden = false;
     var b = document.getElementById("sub-send"); if (b) b.innerHTML = "更新する" + IC.arrow;
     var st = document.getElementById("rec-status"); if (st) st.textContent = "";
@@ -1472,7 +1628,7 @@
     f.scrollIntoView({ behavior: "smooth", block: "start" });
   }
   function endEdit() {
-    S.editId = null;
+    S.editId = null; S.editStaff = false; S.staffEdit = null;
     var bn = document.getElementById("sub-editing"); if (bn) { bn.hidden = true; bn.innerHTML = ""; }
     var b = document.getElementById("sub-send"); if (b) b.innerHTML = "登録する" + IC.arrow;
   }
@@ -1480,8 +1636,8 @@
     var r = readForm(), msg = document.getElementById("sub-msg"), btn = document.getElementById("sub-send");
     if (r.errs.length) { msg.className = "sub-msg bad"; msg.innerHTML = r.errs.slice(0, 4).map(esc).join("<br>") + (r.errs.length > 4 ? "<br>ほか " + (r.errs.length - 4) + " 件" : ""); return; }
     btn.disabled = true; msg.className = "sub-msg"; msg.textContent = "送信中…";
-    var editing = S.editId;
-    (editing ? SB.rpc("update_match", { match_id: editing, payload: r.payload }) : SB.rpc("submit_match", { payload: r.payload })).then(function (res) {
+    var editing = S.editId, staffing = S.editStaff;
+    (editing ? SB.rpc(staffing ? "staff_update_match" : "update_match", { match_id: editing, payload: r.payload }) : SB.rpc("submit_match", { payload: r.payload })).then(function (res) {
       btn.disabled = false;
       if (res.error) { msg.className = "sub-msg bad"; msg.textContent = /update_match/.test(res.error.message || "") ? "データベースの準備がまだです(db/edit_match.sql の実行が必要です)。" : dbErr(res.error); return; }
       var d = res.data || {};
@@ -1492,7 +1648,8 @@
       S.rec = null; document.querySelectorAll(".sub-items").forEach(function (b) { b.hidden = true; b.innerHTML = ""; });
       var rs = document.getElementById("rec-status"); if (rs) rs.textContent = "";
       msg.className = "sub-msg ok";
-      msg.textContent = editing ? "No." + d.id + " を直しました。" + (d.status === "approved" ? "集計には15分ほどで反映されます。" : "承認されると集計に入ります。") : d.status === "approved" ? "登録しました(No." + d.id + ")。集計には15分ほどで反映されます。" : "登録しました(No." + d.id + ")。承認されると集計に入ります。" + (d.dup_of ? "同じ試合(No." + d.dup_of + ")がすでにあるので、運営が確認します。" : "");
+      if (staffing) { msg.className = "sub-msg ok"; msg.innerHTML = "No." + d.id + ' を直しました。集計には15分ほどで反映されます。<a href="#review">承認の画面に戻る</a>'; }
+      else msg.textContent = editing ? "No." + d.id + " を直しました。" + (d.status === "approved" ? "集計には15分ほどで反映されます。" : "承認されると集計に入ります。") : d.status === "approved" ? "登録しました(No." + d.id + ")。集計には15分ほどで反映されます。" : "登録しました(No." + d.id + ")。承認されると集計に入ります。" + (d.dup_of ? "同じ試合(No." + d.dup_of + ")がすでにあるので、運営が確認します。" : "");
       var f = document.getElementById("sub-form");
       f.querySelectorAll(".sub-hero, [data-kda], #f-note, #f-dur, #f-battle").forEach(function (x) { x.value = ""; if (x.classList.contains("sub-hero")) subFace(x); });
       f.querySelectorAll('input[name="f-win"], input[name="f-me"]').forEach(function (x) { x.checked = false; });
@@ -1519,6 +1676,11 @@
     SB.rpc("current_season").then(function (r) { if (!r.error && r.data) { S.curSeason = r.data; if (done) done(r.data); } });
   }
   function loadMySubs() {
+    if (S.staffEdit && canManage()) {   /* 運営 opened 「直す」 on the approval page */
+      var se = S.staffEdit; S.staffEdit = null;
+      startEdit(se.id, se, true);
+      var sf = document.getElementById("sub-editing"); if (sf) sf.scrollIntoView({ block: "center" });
+    }
     loadSeason(function (v) {
       var n = document.getElementById("f-season-now"); if (n) n.textContent = v;
       var e = document.getElementById("f-season"); if (e && !e.value) e.value = v;
@@ -1545,38 +1707,243 @@
   /* ----- review page (運営・管理者) + roles ----- */
   function viewReview() {
     var g = acctGate(canReview);
-    return acctHead("REVIEW", "承認待ちの試合", "REVIEW") + '<section class="section tight"><div class="wrap" style="display:flex;flex-direction:column;gap:72px">' + (g ||
+    return acctHead("REVIEW", "承認と運営の作業", "REVIEW") + '<section class="section tight"><div class="wrap" style="display:flex;flex-direction:column;gap:72px">' + (g ||
       (canManage() ? "<div>" + secHead("00", "SEASON", "今のシーズン") + '<p class="muted" style="font-size:13px;margin-bottom:16px">新しく登録される試合は、このシーズンで記録されます。一般の人や信頼ユーザーは変えられません。シーズンが変わったらここを更新してください。</p>' +
         '<div class="sub-actions"><label class="sr" for="rv-season">今のシーズン</label><input id="rv-season" class="rv-why" style="max-width:160px" maxlength="4" placeholder="例: S43" value="' + esc(S.curSeason || "") + '"><button class="chip on-gold" type="button" data-action="rv-season">保存する</button><span id="rv-season-msg" class="sub-msg" role="status" aria-live="polite"></span></div></div>' : "") +
-      "<div>" + secHead("01", "PENDING", "承認待ち") + '<p class="muted" style="font-size:13px;margin-bottom:16px">内容が正しければ承認してください。承認した試合は15分ほどで集計に入ります。同じ試合が二重に登録されたときは、片方を却下してください。</p><div id="rv-list"><p class="muted">読み込み中…</p></div></div>' +
-      (canManage() ? "<div>" + secHead("02", "MEMBERS", "メンバーと役割") + '<p class="muted" style="font-size:13px;margin-bottom:16px">一般 = 承認が必要 / 信頼ユーザー = すぐ集計に入る / 運営 = 承認と、一般・信頼ユーザーの切り替えができる / 管理者 = すべて' + (AUTH.role === "manager" ? "<br>運営が変えられるのは、一般と信頼ユーザーのあいだだけです。" : "") + '</p><div id="rv-members"><p class="muted">読み込み中…</p></div></div>' : "")) + "</div></section>";
+      "<div>" + secHead("01", "PENDING", "承認待ち") + '<p class="muted" style="font-size:13px;margin-bottom:16px">内容が正しければ承認してください。承認した試合は15分ほどで集計に入ります。<br><span class="tag warn rv-flag">要確認</span> が付いた試合は、運営・管理者の <b>2人</b> が同じ判断をしたときに決まります(登録した本人は投票できません)。管理者は1人で確定することもできます。</p>' +
+        '<div class="rv-bulk" id="rv-bulk" hidden><label class="rv-check"><input type="checkbox" id="rv-all"> すべて選ぶ</label><span id="rv-count" class="mono muted">0件を選択中</span>' +
+        '<button class="chip on-gold" type="button" data-action="rv-bulk-ok">選んだ試合を承認</button><input id="rv-bulk-why" class="rv-why" maxlength="200" placeholder="却下の理由(任意)"><button class="chip" type="button" data-action="rv-bulk-ng">選んだ試合を却下</button><span id="rv-bulk-msg" class="sub-msg" role="status" aria-live="polite"></span></div>' +
+        '<div id="rv-list"><p class="muted">読み込み中…</p></div></div>' +
+      "<div>" + secHead("02", "APPROVED", "承認済みの試合") + '<p class="muted" style="font-size:13px;margin-bottom:16px">承認したあとで間違いに気づいたら、ここで直すか取り消してください。直しても登録した人と承認の状態は変わりません。取り消すと、承認待ちに戻すか却下にできます(却下は30日後に消えます)。</p>' +
+        '<form class="rv-search" data-form="rv-search" role="search"><label class="sr" for="rv-q">承認済みの試合を探す</label><input id="rv-q" class="rv-why" placeholder="No.・戦闘番号・登録した人の名前" value="' + esc(S.rvQ || "") + '"><button class="chip" type="submit">探す</button></form>' +
+        '<div id="rv-approved"><p class="muted">読み込み中…</p></div></div>' +
+      (canManage() ? "<div>" + secHead("03", "MEMBERS", "メンバーと役割") + '<p class="muted" style="font-size:13px;margin-bottom:16px">一般 = 承認が必要 / 信頼ユーザー = すぐ集計に入る(要確認の試合は除く) / 運営 = 承認と、一般・信頼ユーザーの切り替えができる / 管理者 = すべて' + (AUTH.role === "manager" ? "<br>運営が変えられるのは、一般と信頼ユーザーのあいだだけです。" : "") +
+        '<br><b>登録停止</b> = ログインして見ることはできるが、試合を登録できない。<b>統計から外す</b> = 試合は残したまま、勝率などの集計に入れない(様子見に)。</p><div id="rv-members"><p class="muted">読み込み中…</p></div></div>' : "") +
+      "<div>" + secHead("04", "LOG", "作業の記録") + '<p class="muted" style="font-size:13px;margin-bottom:16px">運営・管理者がしたことの記録です(1年分)。修正したものは「変更点」を開くと前後が見られます。</p>' +
+        '<div class="fgroup" role="group" aria-label="記録の種類">' + LOG_KINDS.map(function (k) { return '<button type="button" class="chip" data-action="rv-logf" data-k="' + k[0] + '" aria-pressed="' + ((S.logKind || "all") === k[0]) + '">' + k[1] + "</button>"; }).join("") + "</div>" +
+        '<div id="rv-log" class="rv-log"><p class="muted">読み込み中…</p></div><button class="chip" type="button" data-action="rv-log-more" id="rv-log-more" hidden style="margin-top:16px">もっと見る</button></div>') + "</div></section>";
+  }
+  var FLAG_JP = { dup: "同じ試合がもうある", kda: "KDAが極端", short: "5分未満の試合", old: "60日以上前の試合", burst: "1時間に20件超の登録" };
+  var LOG_KINDS = [["all", "すべて", null], ["review", "承認・却下・投票", ["approve", "reject", "vote_ok", "vote_ng"]], ["fix", "修正・取り消し", ["edit", "unapprove"]],
+    ["member", "メンバー", ["role", "ban", "unban", "exclude", "include"]], ["content", "シーズン・記事", ["season", "hero_note", "tier", "patch_add", "patch_edit", "patch_delete"]]];
+  function flagTags(f) { return (f || []).map(function (k) { return '<span class="tag warn rv-flag">要確認 · ' + esc(FLAG_JP[k] || k) + "</span>"; }).join(""); }
+  function voteLine(m) {
+    if (!m.flags || !m.flags.length) return "";
+    var v = m.votes || [], ya = v.filter(function (x) { return x.approve; }), na = v.filter(function (x) { return !x.approve; });
+    return '<span class="rv-votes">票: 承認 <b class="num">' + ya.length + "</b> / 却下 <b class=\"num\">" + na.length + "</b> (2票で決まります)" +
+      (v.length ? " — " + v.map(function (x) { return esc(x.name || "?") + (x.approve ? " 承認" : " 却下") + (x.me ? "(あなた)" : ""); }).join("、") : "") + "</span>";
+  }
+  function rvBtns(m) {
+    var fl = m.flags && m.flags.length, mine = fl && m.mine, my = (m.votes || []).filter(function (x) { return x.me; })[0];
+    if (mine) return '<span class="rv-btns"><span class="muted" style="font-size:12px">自分が登録した要確認の試合には投票できません</span>' + (AUTH.role === "admin" ? rvForce(m.id) : "") + "</span>";
+    return '<span class="rv-btns"><button class="chip on-gold" type="button" data-action="rv-ok" data-id="' + m.id + '">' + (fl ? "承認に投票" : "承認") + '</button><button class="chip" type="button" data-action="rv-ng" data-id="' + m.id + '">' + (fl ? "却下に投票" : "却下") + "</button>" +
+      (my ? '<span class="muted" style="font-size:12px">あなたは「' + (my.approve ? "承認" : "却下") + "」に投票済み(変えられます)</span>" : "") + (fl && AUTH.role === "admin" ? rvForce(m.id) : "") + "</span>";
+  }
+  function rvForce(id) { return '<span class="rv-force"><span class="mono muted" style="font-size:9px">管理者として確定</span><button class="chip" type="button" data-action="rv-force-ok" data-id="' + id + '">承認</button><button class="chip" type="button" data-action="rv-force-ng" data-id="' + id + '">却下</button></span>'; }
+  function rvInfo(m, extra) {
+    return '<span class="mono muted" style="font-size:10px">No.' + m.id + " · " + esc(m.submitter || "?") + (m.submitter_role ? "(" + esc(ROLE_JP[m.submitter_role] || "") + ")" : "") + '</span><span class="num">' + esc(String(m.played_on).replace(/-/g, ".")) + '</span><span><span class="mlog-res ' + (m.win ? "w" : "l") + '">' + (m.win ? "WIN" : "LOSE") + '</span> <span class="muted" style="font-size:12px">' + esc(m.season || "") + " " + esc(m.rank || "—") + (m.stars != null ? " ★" + m.stars : "") + " · " + esc((PARTIES.filter(function (p) { return p[0] === m.party; })[0] || ["", m.party || "—"])[1]) + " · " + meDur(m.duration_sec) + "</span></span>" +
+      (m.battle_id ? '<span class="mono muted" style="font-size:10px">戦闘番号 ' + esc(m.battle_id) + "</span>" : "") + (extra || "") + (m.note ? '<span class="muted" style="font-size:12px">メモ: ' + esc(m.note) + "</span>" : "");
   }
   function loadReview() {
     loadSeason(function (v) { var rs = document.getElementById("rv-season"); if (rs && !rs.value) rs.value = v; });
+    loadPending(); loadApproved(); loadMembers(); S.logBefore = null; loadLog(true);
+  }
+  function loadPending() {
     var box = document.getElementById("rv-list"); if (!box || !SB) return;
     SB.rpc("pending_matches", { lim: 100 }).then(function (res) {
       if (!document.getElementById("rv-list")) return;
-      if (res.error) { box.innerHTML = '<p class="sub-msg bad">' + esc(dbErr(res.error)) + "</p>"; return; }
+      var bulk = document.getElementById("rv-bulk");
+      if (res.error) { box.innerHTML = '<p class="sub-msg bad">' + esc(/manage\.sql|flags|votes/.test(res.error.message || "") ? "データベースの準備がまだです(db/manage.sql の実行が必要です)。" : dbErr(res.error)) + "</p>"; return; }
       var rows = res.data || [];
+      bulk.hidden = !rows.length; rvCount();
       if (!rows.length) { box.innerHTML = '<div class="empty" style="padding:44px 24px"><span class="tag">CLEAR</span><h3>承認待ちの試合はありません</h3></div>'; return; }
       box.innerHTML = '<ol class="mlog">' + rows.map(function (m) {
-        return '<li class="mlog-row rv-row" id="rv-' + m.id + '"><div class="mlog-info"><span class="mono muted" style="font-size:10px">No.' + m.id + " · " + esc(m.submitter || "?") + "(" + esc(ROLE_JP[m.submitter_role] || "") + ')</span><span class="num">' + esc(String(m.played_on).replace(/-/g, ".")) + '</span><span><span class="mlog-res ' + (m.win ? "w" : "l") + '">' + (m.win ? "WIN" : "LOSE") + '</span> <span class="muted" style="font-size:12px">' + esc(m.season || "") + " " + esc(m.rank || "—") + (m.stars != null ? " ★" + m.stars : "") + " · " + esc((PARTIES.filter(function (p) { return p[0] === m.party; })[0] || ["", m.party || "—"])[1]) + " · " + meDur(m.duration_sec) + "</span></span>" +
-          (m.battle_id ? '<span class="mono muted" style="font-size:10px">戦闘番号 ' + esc(m.battle_id) + "</span>" : "") + (m.dup_of ? '<span class="tag warn" style="font-size:9px;padding:2px 6px;align-self:flex-start">No.' + m.dup_of + (m.battle_id ? " と戦闘番号か内容が同じ</span>" : " と同じ試合かも</span>") : "") + (m.note ? '<span class="muted" style="font-size:12px">メモ: ' + esc(m.note) + "</span>" : "") +
-          '<span class="rv-btns"><button class="chip on-gold" type="button" data-action="rv-ok" data-id="' + m.id + '">承認</button><button class="chip" type="button" data-action="rv-ng" data-id="' + m.id + '">却下</button></span></div>' +
+        var fl = m.flags && m.flags.length;
+        return '<li class="mlog-row rv-row' + (fl ? " rv-flagged" : "") + '" id="rv-' + m.id + '"><div class="mlog-info">' + (fl && m.mine ? "" : '<label class="rv-check"><input type="checkbox" class="rv-sel" value="' + m.id + '"><span class="sr">No.' + m.id + " を選ぶ</span></label>") +
+          rvInfo(m, (m.dup_of ? '<span class="tag warn" style="font-size:9px;padding:2px 6px;align-self:flex-start">No.' + m.dup_of + (m.battle_id ? " と戦闘番号か内容が同じ</span>" : " と同じ試合かも</span>") : "") + (fl ? '<span class="rv-flags">' + flagTags(m.flags) + "</span>" + voteLine(m) : "")) +
+          rvBtns(m) + "</div>" +
           teamFaces(m.picks || [], "ally", { meLabel: "SENDER" }) + '<span class="mono muted mlog-vs">VS</span>' + teamFaces(m.picks || [], "enemy") + rvIcons(m.icons) + "</li>";
       }).join("") + "</ol>";
     });
-    var mb = document.getElementById("rv-members"); if (!mb) return;
+  }
+  function fmtDT(s) { var d = new Date(s); return isNaN(d) ? String(s) : d.getFullYear() + "." + ("0" + (d.getMonth() + 1)).slice(-2) + "." + ("0" + d.getDate()).slice(-2) + " " + ("0" + d.getHours()).slice(-2) + ":" + ("0" + d.getMinutes()).slice(-2); }
+  function rvSelected() { return [].map.call(document.querySelectorAll(".rv-sel:checked"), function (x) { return Number(x.value); }); }
+  function rvCount() { var c = document.getElementById("rv-count"); if (c) c.textContent = rvSelected().length + "件を選択中"; }
+  function reviewBulk(ok, btn) {
+    var ids = rvSelected(), msg = document.getElementById("rv-bulk-msg");
+    if (!ids.length) { msg.className = "sub-msg bad"; msg.textContent = "試合を選んでください"; return; }
+    var why = ok ? null : (document.getElementById("rv-bulk-why").value.trim() || "内容が正しくないため");
+    btn.disabled = true; msg.className = "sub-msg"; msg.textContent = ids.length + "件を処理しています…";
+    SB.rpc("review_matches", { ids: ids, approve: ok, reason: why }).then(function (res) {
+      btn.disabled = false;
+      if (res.error) { msg.className = "sub-msg bad"; msg.textContent = dbErr(res.error); return; }
+      var d = res.data || {}, parts = [];
+      if (d.approved) parts.push("承認 " + d.approved + "件"); if (d.rejected) parts.push("却下 " + d.rejected + "件"); if (d.voted) parts.push("要確認に投票 " + d.voted + "件");
+      if (d.skipped) parts.push("処理済み " + d.skipped + "件"); if (d.failed) parts.push("できなかったもの " + d.failed + "件(自分の要確認の試合など)");
+      msg.className = "sub-msg ok"; msg.textContent = parts.join(" · ") || "変わった試合はありません";
+      var all = document.getElementById("rv-all"); if (all) all.checked = false;
+      loadPending(); S.logBefore = null; loadLog(true);
+    });
+  }
+
+  /* ---- approved matches: correct or take back ---- */
+  function loadApproved() {
+    var box = document.getElementById("rv-approved"); if (!box || !SB) return;
+    SB.rpc("staff_matches", { q: S.rvQ || "", lim: 30 }).then(function (res) {
+      if (!document.getElementById("rv-approved")) return;
+      if (res.error) { box.innerHTML = '<p class="sub-msg bad">' + esc(/staff_matches/.test(res.error.message || "") ? "データベースの準備がまだです(db/manage.sql の実行が必要です)。" : dbErr(res.error)) + "</p>"; return; }
+      var rows = res.data || [];
+      if (!rows.length) { box.innerHTML = '<p class="muted" style="font-size:14px">' + (S.rvQ ? "「" + esc(S.rvQ) + "」に当てはまる承認済みの試合はありません。" : "承認済みの試合はまだありません。") + "</p>"; return; }
+      box.innerHTML = '<p class="muted" style="font-size:12px;margin-bottom:10px">' + (S.rvQ ? "「" + esc(S.rvQ) + "」の検索結果" : "最近承認した順に30件") + '</p><ol class="mlog">' + rows.map(function (m) {
+        var extra = '<span class="mono muted" style="font-size:10px">承認: ' + esc(m.reviewer || "—") + (m.reviewed_at ? " · " + esc(fmtDT(m.reviewed_at)) : "") + "</span>" +
+          (m.updated_at ? '<span class="tag dim" style="font-size:9px;padding:2px 6px;align-self:flex-start">運営が修正済み</span>' : "") + (m.flags && m.flags.length ? '<span class="rv-flags">' + flagTags(m.flags) + "</span>" : "");
+        return '<li class="mlog-row rv-row" id="ra-' + m.id + '"><div class="mlog-info">' + rvInfo(m, extra) +
+          '<span class="rv-btns"><button class="chip on-gold" type="button" data-action="rv-edit" data-id="' + m.id + '">直す</button><button class="chip" type="button" data-action="rv-undo" data-id="' + m.id + '">取り消す</button></span></div>' +
+          teamFaces(m.picks || [], "ally", { meLabel: "SENDER" }) + '<span class="mono muted mlog-vs">VS</span>' + teamFaces(m.picks || [], "enemy") + "</li>";
+      }).join("") + "</ol>";
+    });
+  }
+  function undoAsk(id) {
+    var row = document.getElementById("ra-" + id); if (!row) return;
+    row.querySelector(".rv-btns").innerHTML = '<label class="sr" for="ra-to-' + id + '">戻し先</label><select id="ra-to-' + id + '" class="rv-role"><option value="pending">承認待ちに戻す</option><option value="rejected">却下にする</option></select>' +
+      '<label class="sr" for="ra-why-' + id + '">理由</label><input id="ra-why-' + id + '" class="rv-why" maxlength="200" placeholder="理由(却下なら登録した人に見えます)">' +
+      '<button class="chip" type="button" data-action="rv-undo-go" data-id="' + id + '">取り消す</button><button class="chip" type="button" data-action="rv-undo-cancel" data-id="' + id + '">やめる</button>';
+  }
+  function undoGo(id, btn) {
+    var to = document.getElementById("ra-to-" + id).value, why = document.getElementById("ra-why-" + id).value.trim();
+    btn.disabled = true;
+    SB.rpc("unapprove_match", { match_id: Number(id), to_status: to, reason: why || null }).then(function (res) {
+      var row = document.getElementById("ra-" + id); btn.disabled = false;
+      if (res.error) { var em = document.createElement("span"); em.className = "sub-msg bad"; em.textContent = dbErr(res.error); row.querySelector(".mlog-info").appendChild(em); return; }
+      row.classList.add("rv-done"); row.querySelector(".rv-btns").innerHTML = '<span class="tag warn">' + (to === "pending" ? "承認待ちに戻しました" : "却下にしました") + "</span>";
+      loadPending(); S.logBefore = null; loadLog(true);
+    });
+  }
+  function staffEdit(id, btn) {
+    btn.disabled = true;
+    SB.rpc("staff_match", { match_id: Number(id) }).then(function (res) {
+      btn.disabled = false;
+      if (res.error) { var em = document.createElement("span"); em.className = "sub-msg bad"; em.textContent = dbErr(res.error); btn.parentNode.appendChild(em); return; }
+      S.staffEdit = res.data; go("#submit");
+    });
+  }
+
+  /* ---- members: roles, 登録停止, 統計から外す ---- */
+  function loadMembers() {
+    var mb = document.getElementById("rv-members"); if (!mb || !SB) return;
     SB.rpc("list_profiles").then(function (res) {
       if (!document.getElementById("rv-members")) return;
       if (res.error) { mb.innerHTML = '<p class="sub-msg bad">' + esc(dbErr(res.error)) + "</p>"; return; }
-      mb.innerHTML = meTable(["名前", "役割", "承認済み", "承認待ち", "登録日"], (res.data || []).map(function (p) {
+      var hasFlags = (res.data || []).some(function (p) { return "banned" in p; });
+      mb.innerHTML = meTable(["名前", "役割", "承認済み", "承認待ち"].concat(hasFlags ? ["登録停止", "統計から外す"] : []).concat(["登録日"]), (res.data || []).map(function (p) {
         var self = AUTH.user && p.id === AUTH.user.id, locked = self || (AUTH.role === "manager" && ROLE_LOW.indexOf(p.role) < 0);
         var opts = AUTH.role === "admin" ? Object.keys(ROLE_JP) : ROLE_LOW;
-        return '<tr><td><span class="mem-name">' + avatarHtml(p.avatar || "", p.discord_avatar || "", p.name, "sm") + esc(p.name || "(名前なし)") + "</span>" + (self ? ' <span class="tag dim me-thin">あなた</span>' : "") + "</td><td>" +
+        var sw = function (cls, on, label) { return locked ? '<span class="' + (on ? "sub-msg bad" : "muted") + '" style="font-size:12px">' + (on ? "はい" : "—") + "</span>" : '<label class="rv-switch"><input type="checkbox" class="' + cls + '" data-uid="' + p.id + '"' + (on ? " checked" : "") + '><span class="sr">' + esc(p.name) + " を" + label + "</span><i></i></label>"; };
+        return '<tr' + (p.banned ? ' class="rv-banned"' : "") + '><td><span class="mem-name">' + avatarHtml(p.avatar || "", p.discord_avatar || "", p.name, "sm") + esc(p.name || "(名前なし)") + "</span>" + (self ? ' <span class="tag dim me-thin">あなた</span>' : "") + "</td><td>" +
           (locked ? '<span class="muted">' + esc(ROLE_JP[p.role] || p.role) + "</span>" :
-          '<select class="rv-role" data-uid="' + p.id + '" aria-label="' + esc(p.name) + ' の役割">' + opts.map(function (k) { return '<option value="' + k + '"' + (k === p.role ? " selected" : "") + ">" + ROLE_JP[k] + "</option>"; }).join("") + "</select>") + '</td><td class="num">' + p.approved + '</td><td class="num">' + p.pending + '</td><td class="num muted">' + esc(String(p.created_at).slice(0, 10).replace(/-/g, ".")) + "</td></tr>";
+          '<select class="rv-role" data-uid="' + p.id + '" aria-label="' + esc(p.name) + ' の役割">' + opts.map(function (k) { return '<option value="' + k + '"' + (k === p.role ? " selected" : "") + ">" + ROLE_JP[k] + "</option>"; }).join("") + "</select>") + '</td><td class="num">' + p.approved + '</td><td class="num">' + p.pending + "</td>" +
+          (hasFlags ? "<td>" + sw("rv-ban", p.banned, "登録停止にする") + "</td><td>" + sw("rv-excl", p.stats_excluded, "統計から外す") + "</td>" : "") +
+          '<td class="num muted">' + esc(String(p.created_at).slice(0, 10).replace(/-/g, ".")) + "</td></tr>";
       }));
+    });
+  }
+
+  /* ---- 作業の記録 ---- */
+  function loadLog(reset) {
+    var box = document.getElementById("rv-log"), more = document.getElementById("rv-log-more"); if (!box || !SB) return;
+    if (reset) S.logBefore = null;
+    var kind = (LOG_KINDS.filter(function (k) { return k[0] === (S.logKind || "all"); })[0] || LOG_KINDS[0])[2];
+    SB.rpc("audit_list", { lim: 50, before: S.logBefore, kinds: kind }).then(function (res) {
+      if (!document.getElementById("rv-log")) return;
+      if (res.error) { box.innerHTML = '<p class="sub-msg bad">' + esc(/audit_list/.test(res.error.message || "") ? "データベースの準備がまだです(db/manage.sql の実行が必要です)。" : dbErr(res.error)) + "</p>"; return; }
+      var rows = res.data || [];
+      if (reset) { box.innerHTML = ""; S.logDay = null; }
+      if (!rows.length && reset) box.innerHTML = '<p class="muted" style="font-size:14px">記録はまだありません。</p>';
+      var html = "";
+      rows.forEach(function (e) {
+        var d = new Date(e.at), day = d.getFullYear() + "." + ("0" + (d.getMonth() + 1)).slice(-2) + "." + ("0" + d.getDate()).slice(-2);
+        if (day !== S.logDay) { html += '<h4 class="rv-log-day mono">' + day + "</h4>"; S.logDay = day; }
+        html += logRow(e, ("0" + d.getHours()).slice(-2) + ":" + ("0" + d.getMinutes()).slice(-2));
+      });
+      box.insertAdjacentHTML("beforeend", html);
+      if (rows.length) S.logBefore = rows[rows.length - 1].id;
+      more.hidden = rows.length < 50;
+    });
+  }
+  var LOG_FIELD = { played_on: "日付", season: "シーズン", rank: "ランク", stars: "星", party: "パーティ", win: "勝敗", duration_sec: "試合時間", note: "メモ", battle_id: "戦闘番号" };
+  var NOTE_FIELD = { strengths: "長所", weaknesses: "短所", playbook: "立ち回り" };
+  function logVal(k, v) {
+    if (v == null || v === "") return "(なし)";
+    if (k === "win") return v ? "勝ち" : "負け";
+    if (k === "duration_sec") return meDur(v);
+    if (k === "party") return (PARTIES.filter(function (p) { return p[0] === v; })[0] || ["", v])[1];
+    return String(v);
+  }
+  function editDiff(b, a) {
+    var out = [];
+    b = b || {}; a = a || {};
+    Object.keys(LOG_FIELD).forEach(function (k) { if (JSON.stringify(b[k]) !== JSON.stringify(a[k])) out.push([LOG_FIELD[k], logVal(k, b[k]), logVal(k, a[k])]); });
+    var bp = b.picks || {}, ap = a.picks || {};
+    ["ally", "enemy"].forEach(function (side) { LANE_ORDER.forEach(function (L) {
+      var k = side + ":" + L, x = bp[k] || {}, y = ap[k] || {}, nm = (side === "ally" ? "味方 " : "敵 ") + L;
+      var hn = function (id) { return id && CH[id] ? CH[id].name : id || "(なし)"; }, kda = function (p) { return p.k == null ? "(なし)" : p.k + "/" + p.d + "/" + p.a; };
+      if (x.hero !== y.hero) out.push([nm + " のヒーロー", hn(x.hero), hn(y.hero)]);
+      if (kda(x) !== kda(y)) out.push([nm + " のKDA", kda(x), kda(y)]);
+      if (JSON.stringify(x.items || null) !== JSON.stringify(y.items || null)) out.push([nm + " の装備", (x.items || []).length + "個", (y.items || []).length + "個"]);
+      if (!!x.me !== !!y.me && side === "ally") out.push(["登録した人のレーン", x.me ? L + " だった" : "—", y.me ? L + " に" : "—"]);
+    }); });
+    return out;
+  }
+  function logRow(e, hm) {
+    var d = e.detail || {}, no = e.match_id ? '<b class="num">No.' + e.match_id + "</b>" : "", who = e.target_name ? "<b>" + esc(e.target_name) + "</b>" : "", txt = "", more = "";
+    var hero = function (id) { return id && CH[id] ? esc(CH[id].name) : esc(id || "?"); };
+    switch (e.action) {
+      case "approve": txt = no + " を承認" + (d.forced ? "(管理者が確定)" : d.votes && d.votes.length ? "(" + d.votes.filter(function (v) { return v.approve; }).length + "票で決定)" : ""); break;
+      case "reject": txt = no + " を却下" + (d.forced ? "(管理者が確定)" : d.votes && d.votes.length ? "(" + d.votes.filter(function (v) { return !v.approve; }).length + "票で決定)" : "") + (d.reason ? ' <span class="muted">— ' + esc(d.reason) + "</span>" : ""); break;
+      case "vote_ok": txt = no + " に「承認」の票"; break;
+      case "vote_ng": txt = no + " に「却下」の票" + (d.reason ? ' <span class="muted">— ' + esc(d.reason) + "</span>" : ""); break;
+      case "edit":
+        var df = editDiff(d.before, d.after);
+        txt = no + " を修正(" + (df.length ? df.length + "か所" : "変更なし") + ")";
+        if (df.length) more = '<details class="rv-diff"><summary>変更点</summary><table>' + df.map(function (r) { return "<tr><th>" + esc(r[0]) + '</th><td class="was">' + esc(r[1]) + '</td><td aria-hidden="true">→</td><td>' + esc(r[2]) + "</td></tr>"; }).join("") + "</table></details>";
+        break;
+      case "unapprove": txt = no + " の承認を取り消し(" + (d.to === "rejected" ? "却下に" : "承認待ちに戻す") + ")" + (d.reason ? ' <span class="muted">— ' + esc(d.reason) + "</span>" : ""); break;
+      case "role": txt = who + " の役割を " + esc(ROLE_JP[d.from] || d.from) + " → " + esc(ROLE_JP[d.to] || d.to); break;
+      case "ban": txt = who + " を登録停止に"; break;
+      case "unban": txt = who + " の登録停止を解除"; break;
+      case "exclude": txt = who + " を統計から外した"; break;
+      case "include": txt = who + " を統計に戻した"; break;
+      case "season": txt = "今のシーズンを " + esc(d.from || "—") + " → " + esc(d.to); break;
+      case "hero_note":
+        var ks = Object.keys(d.changes || {});
+        txt = hero(d.hero) + " の解説を更新(" + ks.map(function (k) { return NOTE_FIELD[k] || k; }).join("・") + ")";
+        more = '<details class="rv-diff"><summary>変更点</summary>' + ks.map(function (k) { var c = d.changes[k]; return '<div class="rv-note-diff"><span class="mono gold" style="font-size:10px">' + (NOTE_FIELD[k] || k) + '</span><p class="was">' + (esc(c.before || "") || "(なし)") + "</p><p>" + (esc(c.after || "") || "(なし)") + "</p></div>"; }).join("") + "</details>";
+        break;
+      case "tier": txt = hero(d.hero) + "(" + esc(d.lane) + ")のTIERを " + esc(d.from || "自動") + " → " + esc(d.to || "自動"); break;
+      case "patch_add": txt = "パッチ " + esc(d.version || "") + " を追加"; break;
+      case "patch_edit": txt = "パッチ " + esc(d.version || "") + " を更新"; break;
+      case "patch_delete": txt = "パッチ " + esc(d.version || "") + " を削除"; break;
+      default: txt = esc(e.action);
+    }
+    return '<div class="rv-log-row"><span class="mono muted num">' + hm + '</span><span class="rv-log-who">' + esc(e.actor_name || "?") + (e.actor_role ? ' <span class="tag dim me-thin">' + esc(ROLE_JP[e.actor_role] || e.actor_role) + "</span>" : "") + '</span><span class="rv-log-what"><span>' + txt + "</span>" + more + "</span></div>";
+  }
+  function reviewAsk(id, force) {
+    var row = document.getElementById("rv-" + id); if (!row) return;
+    row.querySelector(".rv-btns").innerHTML = '<label class="sr" for="rv-why-' + id + '">却下する理由</label><input id="rv-why-' + id + '" class="rv-why" maxlength="200" placeholder="却下する理由(登録した人に見えます)" value="内容が正しくないため">' +
+      '<button class="chip" type="button" data-action="rv-ng-go" data-id="' + id + '"' + (force ? ' data-force="1"' : "") + ">" + (force ? "管理者として却下" : "却下する") + '</button><button class="chip" type="button" data-action="rv-ng-cancel" data-id="' + id + '">やめる</button>';
+    var w = document.getElementById("rv-why-" + id); if (w) { w.focus(); w.select(); }
+  }
+  function reviewOne(id, ok, btn, force) {
+    var reason = null;
+    if (!ok) { var w = document.getElementById("rv-why-" + id); reason = w ? w.value.trim() : ""; }
+    btn.disabled = true;
+    SB.rpc(force ? "decide_match" : "review_match", { match_id: Number(id), approve: ok, reason: reason }).then(function (res) {
+      var row = document.getElementById("rv-" + id);
+      if (res.error) { btn.disabled = false; if (row) { var em = row.querySelector(".rv-err") || row.querySelector(".mlog-info").appendChild(document.createElement("span")); em.className = "sub-msg bad rv-err"; em.textContent = dbErr(res.error); } return; }
+      var r = res.data;
+      if (r === "voted") { loadPending(); S.logBefore = null; loadLog(true); return; }
+      if (row) { row.classList.add("rv-done"); var cb = row.querySelector(".rv-sel"); if (cb) { cb.checked = false; cb.disabled = true; } row.querySelector(".rv-btns").innerHTML = '<span class="tag' + (ok ? "" : " warn") + '">' + (ok ? "承認しました" : "却下しました") + "</span>"; rvCount(); }
+      S.logBefore = null; loadLog(true);
     });
   }
   /* crops from the screenshot with the name the submitter gave them: they become references when the match is approved */
@@ -1588,23 +1955,6 @@
       return '<span class="rv-icon"><img src="' + esc(x.img) + '" alt=""><span>' + esc(name) + "</span></span>";
     }).join("") + "</div></div>";
   }
-  function reviewAsk(id) {
-    var row = document.getElementById("rv-" + id); if (!row) return;
-    row.querySelector(".rv-btns").innerHTML = '<label class="sr" for="rv-why-' + id + '">却下する理由</label><input id="rv-why-' + id + '" class="rv-why" maxlength="200" placeholder="却下する理由(登録した人に見えます)" value="内容が正しくないため">' +
-      '<button class="chip" type="button" data-action="rv-ng-go" data-id="' + id + '">却下する</button><button class="chip" type="button" data-action="rv-ng-cancel" data-id="' + id + '">やめる</button>';
-    var w = document.getElementById("rv-why-" + id); if (w) { w.focus(); w.select(); }
-  }
-  function reviewOne(id, ok, btn) {
-    var reason = null;
-    if (!ok) { var w = document.getElementById("rv-why-" + id); reason = w ? w.value.trim() : ""; }
-    btn.disabled = true;
-    SB.rpc("review_match", { match_id: Number(id), approve: ok, reason: reason }).then(function (res) {
-      var row = document.getElementById("rv-" + id);
-      if (res.error) { btn.disabled = false; if (row) { var em = row.querySelector(".rv-err") || row.querySelector(".mlog-info").appendChild(document.createElement("span")); em.className = "sub-msg bad rv-err"; em.textContent = dbErr(res.error); } return; }
-      if (row) { row.classList.add("rv-done"); row.querySelector(".rv-btns").innerHTML = '<span class="tag' + (ok ? "" : " warn") + '">' + (ok ? "承認しました" : "却下しました") + "</span>"; }
-    });
-  }
-
   /* ---------------- layout ---------------- */
   var NAV = [["home", "HOME"], ["me", "MY PAGE"], ["champions", "CHAMPIONS"], ["equipment", "EQUIPMENT"], ["matchup", "MATCHUP LAB"], ["patch", "PATCH &amp; META"], ["lore", "LORE ARCHIVE"]];
   function header(cur) {
@@ -1717,8 +2067,28 @@
       return; }
     if (act === "rv-ok") { reviewOne(t.getAttribute("data-id"), true, t); return; }
     if (act === "rv-ng") { reviewAsk(t.getAttribute("data-id")); return; }
-    if (act === "rv-ng-go") { reviewOne(t.getAttribute("data-id"), false, t); return; }
-    if (act === "rv-ng-cancel") { var rr = document.getElementById("rv-" + t.getAttribute("data-id")); if (rr) rr.querySelector(".rv-btns").innerHTML = '<button class="chip on-gold" type="button" data-action="rv-ok" data-id="' + t.getAttribute("data-id") + '">承認</button><button class="chip" type="button" data-action="rv-ng" data-id="' + t.getAttribute("data-id") + '">却下</button>'; return; }
+    if (act === "rv-force-ok") { reviewOne(t.getAttribute("data-id"), true, t, true); return; }
+    if (act === "rv-force-ng") { reviewAsk(t.getAttribute("data-id"), true); return; }
+    if (act === "rv-ng-go") { reviewOne(t.getAttribute("data-id"), false, t, t.getAttribute("data-force") === "1"); return; }
+    if (act === "rv-ng-cancel") { loadPending(); return; }
+    if (act === "rv-bulk-ok" || act === "rv-bulk-ng") { reviewBulk(act === "rv-bulk-ok", t); return; }
+    if (act === "rv-edit") { staffEdit(t.getAttribute("data-id"), t); return; }
+    if (act === "rv-undo") { undoAsk(t.getAttribute("data-id")); return; }
+    if (act === "rv-undo-go") { undoGo(t.getAttribute("data-id"), t); return; }
+    if (act === "rv-undo-cancel") { loadApproved(); return; }
+    if (act === "rv-logf") { S.logKind = t.getAttribute("data-k"); document.querySelectorAll('[data-action="rv-logf"]').forEach(function (b) { b.setAttribute("aria-pressed", String(b === t)); }); loadLog(true); return; }
+    if (act === "rv-log-more") { loadLog(false); return; }
+    if (act === "hn-edit") { var hb = document.getElementById(t.getAttribute("data-f") === "pc" ? "hn-pc" : "hn-pb"); if (hb) { hb.innerHTML = heroNoteEditor(t.getAttribute("data-f"), t.getAttribute("data-hero")); var ta0 = hb.querySelector("textarea"); if (ta0) ta0.focus(); } return; }
+    if (act === "hn-save") { heroNoteSave(t); return; }
+    if (act === "hn-cancel") { render(true); return; }
+    if (act === "tl-lane") { S.tierLane = t.getAttribute("data-l"); document.getElementById("tl-box").innerHTML = tierListBox(); return; }
+    if (act === "pt-new") { document.getElementById("pt-new-box").innerHTML = patchForm(); return; }
+    if (act === "pt-edit") { var pp = CT.patches.filter(function (x) { return String(x.id) === t.getAttribute("data-id"); })[0], pc = document.getElementById("pt-" + t.getAttribute("data-id")); if (pp && pc) pc.innerHTML = patchForm(pp); return; }
+    if (act === "pt-cancel") { document.getElementById("pt-box").innerHTML = patchListBox(); return; }
+    if (act === "pt-add-ch") { t.previousElementSibling.insertAdjacentHTML("beforeend", changeRow()); var nr = t.previousElementSibling.lastElementChild.querySelector("input"); if (nr) nr.focus(); return; }
+    if (act === "pt-rm-ch") { t.closest(".pt-ch").remove(); return; }
+    if (act === "pt-del") { t.parentNode.innerHTML = '<span class="muted" style="font-size:12px">本当に削除しますか?</span><button class="chip" type="button" data-action="pt-del-go" data-id="' + t.getAttribute("data-id") + '">削除する</button><button class="chip" type="button" data-action="pt-cancel">やめる</button>'; return; }
+    if (act === "pt-del-go") { t.disabled = true; SB.rpc("delete_patch", { id: Number(t.getAttribute("data-id")) }).then(function (res) { if (res.error) { t.disabled = false; t.textContent = dbErr(res.error); return; } loadContent(); }); return; }
     if (act === "me-pick") {
       var pk = t.getAttribute("data-k"), pl = t.getAttribute("data-lane"), pm = meList().filter(function (x) { return String(x.k) === pk; })[0];
       if (!pm) return;
@@ -1812,7 +2182,21 @@
     if (t.matches && t.matches(".rec-item select")) { var ci = t.parentNode.querySelector("img.rec-cur"); if (ci) { var cs = itemSrc(t.value); ci.src = cs; ci.hidden = !cs; } }
     if (t.id === "rec-file") { if (t.files && t.files[0]) readShot(t.files[0]); t.value = ""; return; }
     if (t.hasAttribute && t.hasAttribute("data-hero-input")) { var hid2 = heroFromInput(t.value); if (hid2) t.value = CH[hid2].name + " (" + CH[hid2].en + ")"; subFace(t); return; }
-    if (t.classList && t.classList.contains("rv-role")) { t.disabled = true; SB.rpc("set_role", { target: t.getAttribute("data-uid"), new_role: t.value }).then(function (res) { t.disabled = false; if (res.error) { var e2 = document.createElement("span"); e2.className = "sub-msg bad"; e2.textContent = dbErr(res.error); t.parentNode.appendChild(e2); loadReview(); } }); return; }
+    if (t.classList && (t.classList.contains("rv-sel") || t.id === "rv-all")) {
+      if (t.id === "rv-all") document.querySelectorAll(".rv-sel:not(:disabled)").forEach(function (x) { x.checked = t.checked; });
+      rvCount(); return; }
+    if (t.classList && (t.classList.contains("rv-ban") || t.classList.contains("rv-excl"))) {
+      var ban = t.classList.contains("rv-ban"); t.disabled = true;
+      SB.rpc("set_user_flags", { target: t.getAttribute("data-uid"), p_banned: ban ? t.checked : null, p_excluded: ban ? null : t.checked }).then(function (res) {
+        t.disabled = false;
+        if (res.error) { t.checked = !t.checked; var e3 = document.createElement("span"); e3.className = "sub-msg bad"; e3.textContent = dbErr(res.error); t.closest("td").appendChild(e3); return; }
+        var tr = t.closest("tr"); if (ban && tr) tr.classList.toggle("rv-banned", t.checked);
+        S.logBefore = null; loadLog(true);
+      });
+      return; }
+    if (t.id && /^ra-to-/.test(t.id)) return;
+    if (t.classList && t.classList.contains("hn-tier")) { tierSave(t); return; }
+    if (t.classList && t.classList.contains("rv-role")) { t.disabled = true; SB.rpc("set_role", { target: t.getAttribute("data-uid"), new_role: t.value }).then(function (res) { t.disabled = false; if (res.error) { var e2 = document.createElement("span"); e2.className = "sub-msg bad"; e2.textContent = dbErr(res.error); t.parentNode.appendChild(e2); loadMembers(); return; } S.logBefore = null; loadLog(true); }); return; }
     if (b === "it-sort") { S.itf.sort = t.value; document.getElementById("item-grid").innerHTML = itemGrid(); }
     if (b === "q-you" || b === "l-you") S.lab.you = t.value;
     if (b === "q-enemy" || b === "l-enemy") S.lab.enemy = t.value;
@@ -1827,6 +2211,8 @@
     if (ev.target.id === "sub-form") { ev.preventDefault(); sendForm(); return; }
     var f = ev.target.getAttribute("data-form"); if (!f) return;
     ev.preventDefault();
+    if (f === "rv-search") { S.rvQ = document.getElementById("rv-q").value.trim(); loadApproved(); return; }
+    if (f === "patch") { patchSave(ev.target); return; }
     var p = f === "quick" ? "q-" : "l-";
     S.lab.you = document.getElementById(p + "you").value; S.lab.enemy = document.getElementById(p + "enemy").value; S.lab.lane = document.getElementById(p + "lane").value;
     go(muHash(S.lab.you, S.lab.enemy, S.lab.lane));
@@ -1890,7 +2276,7 @@
   var tp0 = topPairs(1)[0]; if (tp0) S.lab = { you: tp0.y, enemy: tp0.e, lane: tp0.lane };
   window.addEventListener("hashchange", function () { closeSearch(); S.artSel = {}; render(); });
   render();
-  if (dbOn()) { try { dbStats(); } catch (e) {} }
+  if (dbOn()) { try { dbStats(); loadContent(); } catch (e) {} }
   var curtain = document.getElementById("curtain");
   function lift() { curtain.classList.add("done"); }
   setTimeout(lift, 700);
