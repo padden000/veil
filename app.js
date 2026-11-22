@@ -16,6 +16,10 @@
   /* ---------------- helpers ---------------- */
   function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (m) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m]; }); }
   var IC = {
+    home: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M4 11 L12 4 L20 11 V20 H14.5 V14.5 H9.5 V20 H4 Z"/></svg>',
+    heroes: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M12 3 L19 6 V12 C19 16.5 15.8 19.4 12 21 C8.2 19.4 5 16.5 5 12 V6 Z"/><path d="M12 8 V16 M9 11 H15"/></svg>',
+    versus: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M4 4 L14 14 M4 4 H8 M4 4 V8 M20 4 L10 14 M20 4 H16 M20 4 V8 M7 17 L10 14 M17 17 L14 14 M5.5 18.5 L8.5 15.5 M18.5 18.5 L15.5 15.5"/></svg>',
+    me: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="12" cy="8.5" r="3.8"/><path d="M4.5 20 C5.5 15.8 8.5 14 12 14 C15.5 14 18.5 15.8 19.5 20"/></svg>',
     dice: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2.5"/><circle cx="9" cy="9" r="1.1" fill="currentColor" stroke="none"/><circle cx="15" cy="15" r="1.1" fill="currentColor" stroke="none"/><circle cx="15" cy="9" r="1.1" fill="currentColor" stroke="none"/><circle cx="9" cy="15" r="1.1" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.1" fill="currentColor" stroke="none"/></svg>',
     arrow: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M4 12 H20 M14 6 L20 12 L14 18"/></svg>',
     search: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20 L16.5 16.5"/></svg>',
@@ -2332,6 +2336,17 @@
 
   /* ---------------- layout ---------------- */
   var NAV = [["home", "HOME"], ["me", "MY PAGE"], ["champions", "CHAMPIONS"], ["equipment", "EQUIPMENT"], ["matchup", "MATCHUP LAB"], ["patch", "PATCH &amp; META"], ["lore", "LORE ARCHIVE"]];
+  /* phones: the main pages sit in a bar at the bottom of the screen; the rest are under メニュー */
+  function tabBar(cur) {
+    var T = [["home", "HOME", IC.home], ["champions", "ヒーロー", IC.heroes], ["matchup", "対面", IC.versus], ["me", "マイページ", IC.me]];
+    var inMore = ["equipment", "patch", "lore", "roulette", "account"].indexOf(cur) >= 0;
+    return '<nav class="tabbar" aria-label="メインメニュー">' + T.map(function (x) { return '<a href="#' + x[0] + '"' + (cur === x[0] ? ' aria-current="page"' : "") + ">" + x[2] + "<span>" + x[1] + "</span></a>"; }).join("") +
+      '<button type="button" data-action="more"' + (inMore ? ' class="on"' : "") + ' aria-expanded="false" aria-controls="more-sheet">' + IC.menu + "<span>メニュー</span></button></nav>" +
+      '<div class="more-sheet" id="more-sheet" hidden><div class="more-back" data-action="more-close"></div><div class="more-panel" role="dialog" aria-label="ほかのページ">' +
+      [["equipment", "EQUIPMENT", "装備・エンブレム・スペル"], ["patch", "PATCH & META", "パッチとTier List"], ["lore", "LORE ARCHIVE", "世界観"], ["roulette", "ROULETTE", "ヒーロールーレット"]].map(function (x) {
+        return '<a href="#' + x[0] + '"' + (cur === x[0] ? ' aria-current="page"' : "") + '><span class="mono gold">' + x[1] + '</span><span class="mincho">' + x[2] + "</span>" + IC.arrow + "</a>"; }).join("") +
+      '<button type="button" class="more-search" data-action="open-search">' + IC.search + "<span>サイト内を検索</span></button></div></div>";
+  }
   function header(cur) {
     return '<header class="site-header"><div class="wrap"><a class="logo" href="#home">' + LOGO + "<span>VEIL</span></a>" +
       '<nav class="nav" id="main-nav" aria-label="メインナビゲーション">' + NAV.map(function (n) { return '<a href="#' + n[0] + '"' + (cur === n[0] ? ' aria-current="page"' : "") + ">" + n[1] + "</a>"; }).join("") + "</nav>" +
@@ -2393,7 +2408,7 @@
   var app = document.getElementById("app");
   function render(keepScroll) {
     var r = route();
-    app.innerHTML = header(r.nav) + '<main id="view" tabindex="-1">' + r.html + "</main>" + footer();
+    app.innerHTML = header(r.nav) + '<main id="view" tabindex="-1">' + r.html + "</main>" + footer() + tabBar(r.nav);   /* the bar sits outside the header: its blur would pin it to the header */
     if (r.after && dbOn() && AUTH.user) setTimeout(r.after, 0);
     if (dbOn()) routeHeroes().forEach(ensureHero);
     fillAds();
@@ -2410,7 +2425,7 @@
   /* ---------------- events ---------------- */
   document.addEventListener("click", function (ev) {
     var t = ev.target.closest("[data-action]");
-    if (!t) { var a = ev.target.closest('a[href^="#"]'); if (a) { var nav = document.getElementById("main-nav"); if (nav) nav.classList.remove("open"); } return; }
+    if (!t) { var a = ev.target.closest('a[href^="#"]'); if (a) { var nav = document.getElementById("main-nav"); if (nav) nav.classList.remove("open"); document.body.classList.remove("sheet-open"); } return; }
     var act = t.getAttribute("data-action");
     if (act === "szoom") { S.schZoom = S.schZoom || {}; S.schZoom[t.getAttribute("data-cid")] = t.getAttribute("data-z"); schRedraw(t.getAttribute("data-cid")); return; }
     if (act === "mseason") { S.meSeason = t.getAttribute("data-s"); schRedraw("me-season"); return; }
@@ -2546,9 +2561,12 @@
       var v = t.querySelector("video"); if (v) { if (v.paused) { var pr = v.play(); if (pr && pr.catch) pr.catch(function () {}); t.classList.add("on"); } else { v.pause(); t.classList.remove("on"); } }
     } else if (act === "tab") {
       selectTab(t.getAttribute("data-target"), false);
+    } else if (act === "more" || act === "more-close") {
+      var sh = document.getElementById("more-sheet"), bt = document.querySelector('.tabbar [data-action="more"]');
+      var op = act === "more" ? sh.hidden : false; sh.hidden = !op; if (bt) bt.setAttribute("aria-expanded", String(op)); document.body.classList.toggle("sheet-open", op);
     } else if (act === "menu") {
       var n = document.getElementById("main-nav"); var open = n.classList.toggle("open"); t.setAttribute("aria-expanded", String(open));
-    } else if (act === "open-search") { openSearch(); }
+    } else if (act === "open-search") { var sh2 = document.getElementById("more-sheet"); if (sh2) sh2.hidden = true; document.body.classList.remove("sheet-open"); openSearch(); }
     else if (act === "close-search") { closeSearch(); }
   });
   document.addEventListener("input", function (ev) {
