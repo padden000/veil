@@ -1114,12 +1114,14 @@
     var t = tierOf(c.id, lane), man = CT.tiers[c.id + "|" + lane];
     var view = t ? tierBadge(t, true) + '<span class="mono muted" style="font-size:9px">' + (t.src === "manual" ? "運営が設定" : "自動") + "</span>" : '<span class="tag dim">データ待ち</span>';
     if (!canManage() || CT.missing) return view;
-    return '<span class="tier-cell">' + view + '<label class="sr" for="hn-tier">' + esc(c.name) + "(" + lane + ")のTIER</label><select id=\"hn-tier\" class=\"hn-tier\" data-hero=\"" + c.id + '" data-lane="' + lane + '"><option value="">自動</option>' + TIERS.map(function (k) { return '<option value="' + k + '"' + (man && man.tier === k ? " selected" : "") + ">" + k + "</option>"; }).join("") + "</select></span>";
+    var sid = "hn-tier-" + c.id + "-" + lane, curv = man ? man.tier : "";
+    return '<span class="tier-cell">' + view + '<label class="sr" for="' + sid + '">' + esc(c.name) + "(" + lane + ")のTIER</label><select id=\"" + sid + '" class="hn-tier" data-hero="' + c.id + '" data-lane="' + lane + '" data-cur="' + curv + '"><option value="">自動</option>' + TIERS.map(function (k) { return '<option value="' + k + '"' + (curv === k ? " selected" : "") + ">" + k + "</option>"; }).join("") + '</select><button type="button" class="chip on-gold tier-go" data-action="tier-save" disabled>登録</button></span>';
   }
-  function tierSave(sel) {
-    var id = sel.getAttribute("data-hero"), lane = sel.getAttribute("data-lane"), v = sel.value || null; sel.disabled = true;
+  function tierDirty(sel) { var b = sel.parentNode.querySelector(".tier-go"); if (b) b.disabled = sel.value === (sel.getAttribute("data-cur") || ""); }
+  function tierSave(sel, btn) {
+    var id = sel.getAttribute("data-hero"), lane = sel.getAttribute("data-lane"), v = sel.value || null; sel.disabled = true; if (btn) { btn.disabled = true; btn.textContent = "登録中…"; }
     SB.rpc("set_hero_tier", { hero: id, lane: lane, tier: v }).then(function (res) {
-      sel.disabled = false;
+      sel.disabled = false; if (btn) { btn.textContent = "登録"; btn.disabled = false; }
       if (res.error) { var e = document.createElement("span"); e.className = "sub-msg bad"; e.textContent = dbErr(res.error); sel.parentNode.appendChild(e); return; }
       if (v) CT.tiers[id + "|" + lane] = { hero: id, lane: lane, tier: v, editor_name: AUTH.name || "" }; else delete CT.tiers[id + "|" + lane];
       render(true);
@@ -1902,6 +1904,7 @@
   /* ---- members: roles, 登録停止, 統計から外す ---- */
   function loadMembers() {
     var mb = document.getElementById("rv-members"); if (!mb || !SB) return;
+    if (S.memDraft && Object.keys(S.memDraft).length) { drawMembers(); return; }   /* keep unsaved changes on screen instead of refetching over them */
     SB.rpc("list_profiles").then(function (res) {
       if (!document.getElementById("rv-members")) return;
       if (res.error) { mb.innerHTML = '<p class="sub-msg bad">' + esc(dbErr(res.error)) + "</p>"; return; }
@@ -1915,6 +1918,36 @@
       drawMembers();
     });
   }
+  /* a change in the members table is only a draft until 登録 is pressed */
+  function memDraft(tr) {
+    if (!tr) return;
+    var uid = tr.getAttribute("data-uid"), p = (S.members || []).filter(function (m) { return m.id === uid; })[0]; if (!p) return;
+    var r = tr.querySelector(".rv-role"), b = tr.querySelector(".rv-ban"), x = tr.querySelector(".rv-excl");
+    var d = { role: r ? r.value : p.role, banned: b ? b.checked : !!p.banned, stats_excluded: x ? x.checked : !!p.stats_excluded };
+    var dirty = d.role !== p.role || d.banned !== !!p.banned || d.stats_excluded !== !!p.stats_excluded;
+    S.memDraft = S.memDraft || {}; if (dirty) S.memDraft[uid] = d; else delete S.memDraft[uid];
+    drawMembers();
+  }
+  function memSave(btn) {
+    var uid = btn.getAttribute("data-uid"), d = (S.memDraft || {})[uid], p = (S.members || []).filter(function (m) { return m.id === uid; })[0];
+    var msg = btn.parentNode.querySelector(".sub-msg"); if (!d || !p) return;
+    btn.disabled = true; msg.className = "sub-msg"; msg.textContent = "登録中…";
+    var step1 = d.role !== p.role ? SB.rpc("set_role", { target: uid, new_role: d.role }) : Promise.resolve({});
+    step1.then(function (res) {
+      if (res.error) throw res.error;
+      p.role = d.role;
+      if (d.banned === !!p.banned && d.stats_excluded === !!p.stats_excluded) return {};
+      return SB.rpc("set_user_flags", { target: uid, p_banned: d.banned !== !!p.banned ? d.banned : null, p_excluded: d.stats_excluded !== !!p.stats_excluded ? d.stats_excluded : null });
+    }).then(function (res) {
+      if (res && res.error) throw res.error;
+      p.banned = d.banned; p.stats_excluded = d.stats_excluded; delete S.memDraft[uid];
+      drawMembers(); S.logBefore = null; loadLog(true);
+      var nb = document.querySelector('#mem-table tr[data-uid="' + uid + '"] .sub-msg'); if (nb) { nb.className = "sub-msg ok"; nb.textContent = "登録しました"; }
+    }).catch(function (err) { btn.disabled = false; msg.className = "sub-msg bad"; msg.textContent = dbErr(err); drawMembersKeepMsg(uid, msg.textContent); });
+  }
+  function drawMembersKeepMsg(uid, text) {
+    drawMembers(); var nb = document.querySelector('#mem-table tr[data-uid="' + uid + '"] .sub-msg'); if (nb) { nb.className = "sub-msg bad"; nb.textContent = text; }
+  }
   var MEM_F = [["all", "すべて"], ["member", "一般"], ["trusted", "信頼ユーザー"], ["manager", "運営"], ["admin", "管理者"], ["banned", "登録停止中"], ["excluded", "統計から外した人"]], MEM_MAX = 100;
   function drawMembers() {
     var box = document.getElementById("mem-table"), cnt = document.getElementById("mem-count"); if (!box) return;
@@ -1926,15 +1959,18 @@
     cnt.textContent = "全 " + all.length + " 人" + (list.length !== all.length ? " · 当てはまる人 " + list.length + " 人" : "") + (list.length > MEM_MAX ? " · 上から " + MEM_MAX + " 人を表示(名前で絞り込んでください)" : "") + " · 登録日の新しい順";
     if (!list.length) { box.innerHTML = '<p class="muted" style="font-size:14px">当てはまる人はいません。</p>'; return; }
     var hasFlags = all.some(function (p) { return "banned" in p; });
-    box.innerHTML = meTable(["名前", "役割", "承認済み", "承認待ち"].concat(hasFlags ? ["登録停止", "統計から外す"] : []).concat(["登録日"]), list.slice(0, MEM_MAX).map(function (p) {
-      var self = AUTH.user && p.id === AUTH.user.id, locked = self || (AUTH.role === "manager" && ROLE_LOW.indexOf(p.role) < 0);
+    var dr = S.memDraft || (S.memDraft = {});
+    box.innerHTML = meTable(["名前", "役割", "承認済み", "承認待ち"].concat(hasFlags ? ["登録停止", "統計から外す"] : []).concat(["登録日", ""]), list.slice(0, MEM_MAX).map(function (p0) {
+      var self = AUTH.user && p0.id === AUTH.user.id, locked = self || (AUTH.role === "manager" && ROLE_LOW.indexOf(p0.role) < 0);
+      var d = !locked && dr[p0.id], p = d ? Object.assign({}, p0, { role: d.role, banned: d.banned, stats_excluded: d.stats_excluded }) : p0;
       var opts = AUTH.role === "admin" ? Object.keys(ROLE_JP) : ROLE_LOW;
       var sw = function (cls, on, label) { return locked ? '<span class="' + (on ? "sub-msg bad" : "muted") + '" style="font-size:12px">' + (on ? "はい" : "—") + "</span>" : '<label class="rv-switch"><input type="checkbox" class="' + cls + '" data-uid="' + p.id + '"' + (on ? " checked" : "") + '><span class="sr">' + esc(p.name) + " を" + label + "</span><i></i></label>"; };
-      return '<tr' + (p.banned ? ' class="rv-banned"' : "") + '><td><span class="mem-name">' + avatarHtml(p.avatar || "", p.discord_avatar || "", p.name, "sm") + esc(p.name || "(名前なし)") + "</span>" + (self ? ' <span class="tag dim me-thin">あなた</span>' : "") + "</td><td>" +
+      return '<tr data-uid="' + p.id + '" class="' + (p0.banned ? "rv-banned" : "") + (d ? " rv-dirty" : "") + '"><td><span class="mem-name">' + avatarHtml(p.avatar || "", p.discord_avatar || "", p.name, "sm") + esc(p.name || "(名前なし)") + "</span>" + (self ? ' <span class="tag dim me-thin">あなた</span>' : "") + "</td><td>" +
         (locked ? '<span class="muted">' + esc(ROLE_JP[p.role] || p.role) + "</span>" :
         '<select class="rv-role" data-uid="' + p.id + '" aria-label="' + esc(p.name) + ' の役割">' + opts.map(function (k) { return '<option value="' + k + '"' + (k === p.role ? " selected" : "") + ">" + ROLE_JP[k] + "</option>"; }).join("") + "</select>") + '</td><td class="num">' + p.approved + '</td><td class="num">' + p.pending + "</td>" +
         (hasFlags ? "<td>" + sw("rv-ban", p.banned, "登録停止にする") + "</td><td>" + sw("rv-excl", p.stats_excluded, "統計から外す") + "</td>" : "") +
-        '<td class="num muted">' + esc(String(p.created_at).slice(0, 10).replace(/-/g, ".")) + "</td></tr>";
+        '<td class="num muted">' + esc(String(p.created_at).slice(0, 10).replace(/-/g, ".")) + "</td>" +
+        '<td class="mem-go">' + (locked ? "" : '<button type="button" class="chip on-gold" data-action="mem-save" data-uid="' + p.id + '"' + (d ? "" : " disabled") + ">登録</button>" + (d ? '<button type="button" class="chip" data-action="mem-undo" data-uid="' + p.id + '">戻す</button>' : "") + '<span class="sub-msg" role="status" aria-live="polite"></span>') + "</td></tr>";
     }));
   }
 
@@ -2482,6 +2518,9 @@
     if (act === "rv-undo-cancel") { loadApproved(); return; }
     if (act === "rv-logf") { S.logKind = t.getAttribute("data-k"); document.querySelectorAll('[data-action="rv-logf"]').forEach(function (b) { b.setAttribute("aria-pressed", String(b === t)); }); loadLog(true); return; }
     if (act === "rv-log-more") { loadLog(false); return; }
+    if (act === "mem-save") { memSave(t); return; }
+    if (act === "mem-undo") { if (S.memDraft) delete S.memDraft[t.getAttribute("data-uid")]; drawMembers(); return; }
+    if (act === "tier-save") { var ts = t.parentNode.querySelector(".hn-tier"); if (ts) tierSave(ts, t); return; }
     if (act === "mem-f") { S.memF = t.getAttribute("data-f"); document.querySelectorAll('[data-action="mem-f"]').forEach(function (b) { b.setAttribute("aria-pressed", String(b === t)); }); drawMembers(); return; }
     if (act === "hn-edit") { var hb = document.getElementById(t.getAttribute("data-f") === "pc" ? "hn-pc" : "hn-pb"); if (hb) { hb.innerHTML = heroNoteEditor(t.getAttribute("data-f"), t.getAttribute("data-hero")); var ta0 = hb.querySelector("textarea"); if (ta0) ta0.focus(); } return; }
     if (act === "fx-toggle") { try { if (fxPref()) localStorage.removeItem(FX_KEY); else localStorage.setItem(FX_KEY, "off"); } catch (e) {} location.reload(); return; }
@@ -2597,19 +2636,9 @@
     if (t.classList && (t.classList.contains("rv-sel") || t.id === "rv-all")) {
       if (t.id === "rv-all") document.querySelectorAll(".rv-sel:not(:disabled)").forEach(function (x) { x.checked = t.checked; });
       rvCount(); return; }
-    if (t.classList && (t.classList.contains("rv-ban") || t.classList.contains("rv-excl"))) {
-      var ban = t.classList.contains("rv-ban"); t.disabled = true;
-      SB.rpc("set_user_flags", { target: t.getAttribute("data-uid"), p_banned: ban ? t.checked : null, p_excluded: ban ? null : t.checked }).then(function (res) {
-        t.disabled = false;
-        if (res.error) { t.checked = !t.checked; var e3 = document.createElement("span"); e3.className = "sub-msg bad"; e3.textContent = dbErr(res.error); t.closest("td").appendChild(e3); return; }
-        var tr = t.closest("tr"); if (ban && tr) tr.classList.toggle("rv-banned", t.checked);
-        (S.members || []).forEach(function (m) { if (m.id === t.getAttribute("data-uid")) { if (ban) m.banned = t.checked; else m.stats_excluded = t.checked; } });
-        S.logBefore = null; loadLog(true);
-      });
-      return; }
+    if (t.classList && (t.classList.contains("rv-ban") || t.classList.contains("rv-excl") || t.classList.contains("rv-role"))) { memDraft(t.closest("tr")); return; }
     if (t.id && /^ra-to-/.test(t.id)) return;
-    if (t.classList && t.classList.contains("hn-tier")) { tierSave(t); return; }
-    if (t.classList && t.classList.contains("rv-role")) { t.disabled = true; SB.rpc("set_role", { target: t.getAttribute("data-uid"), new_role: t.value }).then(function (res) { t.disabled = false; if (res.error) { var e2 = document.createElement("span"); e2.className = "sub-msg bad"; e2.textContent = dbErr(res.error); t.parentNode.appendChild(e2); loadMembers(); return; } (S.members || []).forEach(function (m) { if (m.id === t.getAttribute("data-uid")) m.role = t.value; }); S.logBefore = null; loadLog(true); }); return; }
+    if (t.classList && t.classList.contains("hn-tier")) { tierDirty(t); return; }
     if (b === "it-sort") { S.itf.sort = t.value; document.getElementById("item-grid").innerHTML = itemGrid(); }
     if (b === "q-you" || b === "l-you") S.lab.you = t.value;
     if (b === "q-enemy" || b === "l-enemy") S.lab.enemy = t.value;

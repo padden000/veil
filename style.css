@@ -799,6 +799,11 @@ button.mlog-h:focus-visible { outline: 1px solid var(--gold); outline-offset: 1p
 .rv-search input { flex: 1; }
 .rv-switch { display: inline-flex; align-items: center; cursor: pointer; }
 tr.rv-banned td { background: rgba(113,32,42,.18); }
+tr.rv-dirty td { background: rgba(217,185,126,.07); }
+tr.rv-dirty td:first-child { box-shadow: inset 2px 0 0 var(--gold); }
+.mem-go { white-space: nowrap; } .mem-go .chip { min-height: 34px; padding: 0 14px; margin-right: 6px; } .mem-go .chip:disabled { opacity: .35; cursor: default; }
+.mem-go .sub-msg { display: block; font-size: 11px; margin-top: 4px; white-space: normal; }
+.tier-go { min-height: 34px; padding: 0 14px; } .tier-go:disabled { opacity: .35; cursor: default; }
 .rv-log { display: flex; flex-direction: column; }
 .rv-log-day { font-size: 11px; letter-spacing: .2em; color: var(--gold); margin: 22px 0 6px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
 .rv-log-day:first-child { margin-top: 4px; }
@@ -940,7 +945,7 @@ tr.rv-banned td { background: rgba(113,32,42,.18); }
   .rv-bulk .chip { grid-row: 2; justify-content: center; }
   .rv-bulk .sub-msg { grid-column: 1 / -1; }
   #mem-table .table-box { overflow-x: auto; }
-  #mem-table table.data.me-table { min-width: 720px; }
+  #mem-table table.data.me-table { min-width: 860px; }
   #mem-table th { white-space: nowrap; }
   .mem-tools #mem-q { max-width: none; }
   .mem-tools .fgroup { flex: 1 1 100%; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
