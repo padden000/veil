@@ -1286,7 +1286,7 @@
     }
     return page(0);
   }
-  var NO_SOFT = { submit: 1, review: 1, account: 1 };
+  var NO_SOFT = { submit: 1, review: 1, account: 1, feedback: 1 };
   function softRender() { var h = (location.hash || "").replace(/^#/, "") || "home"; if (!NO_SOFT[h]) render(true); }
   function dbStats() {
     if (!SB) return;
@@ -1691,6 +1691,53 @@
     }
     if (icons.length) out.icons = icons;
   }
+  /* ---- ご意見・ご要望 (db/feedback.sql) ---- */
+  var FB_KINDS = [["request", "要望", "こんな機能がほしい・ここを変えてほしい"], ["bug", "不具合", "表示がおかしい・うまく動かない"], ["data", "データの間違い", "解説・装備・統計などの誤り"], ["other", "その他", "上のどれでもない"]];
+  var FB_JP = { request: "要望", bug: "不具合", data: "データの間違い", other: "その他" };
+  function viewFeedback() {
+    var g = acctGate();
+    var head = acctHead("FEEDBACK", "ご意見・ご要望", "FEEDBACK");
+    if (g) return head + '<section class="section tight"><div class="wrap"><p class="muted" style="font-size:14px;margin-bottom:24px">サイトへの要望や不具合の報告を、運営に直接送れます。送るにはDiscordでのログインが必要です(荒らし対策のため)。</p>' + g + "</div></section>";
+    var k = S.fbKind || "request";
+    return head + '<section class="section tight"><div class="wrap fb-wrap">' +
+      '<form class="fb-form" data-form="fb" novalidate><p class="muted" style="font-size:14px;margin:0 0 20px">送った内容は運営と管理者だけが読みます。返事があれば、この下の「送った内容」に出ます(メールなどは届きません)。1日5件まで送れます。</p>' +
+      '<fieldset class="fb-kinds"><legend class="mono muted">種類</legend>' + FB_KINDS.map(function (x) {
+        return '<label class="fb-kind' + (k === x[0] ? " on" : "") + '"><input type="radio" name="fb-kind" value="' + x[0] + '"' + (k === x[0] ? " checked" : "") + '><span class="mincho">' + x[1] + '</span><small class="muted">' + x[2] + "</small></label>"; }).join("") + "</fieldset>" +
+      '<label class="mono muted fb-label" for="fb-body">内容</label><textarea id="fb-body" class="fb-body" maxlength="2000" rows="7" placeholder="できるだけ具体的に書いてください(どのページで・何をしたら・どうなったか など)">' + esc(S.fbDraft || "") + "</textarea>" +
+      '<div class="fb-foot"><span class="mono muted" id="fb-count">' + (S.fbDraft || "").length + " / 2000</span>" +
+      (S.fbFrom ? '<label class="fb-page"><input type="checkbox" id="fb-page" checked> 直前に見ていたページ(' + esc(S.fbFrom) + ")も一緒に送る</label>" : "") +
+      '<button class="chip on-gold" type="submit">送信する</button><span id="fb-msg" class="sub-msg" role="status" aria-live="polite"></span></div></form>' +
+      '<h2 class="subh" style="margin-top:56px">送った内容</h2><div id="fb-mine"><p class="muted">読み込み中…</p></div></div></section>';
+  }
+  function fbWhen(s) { var d = new Date(s); return d.getFullYear() + "." + ("0" + (d.getMonth() + 1)).slice(-2) + "." + ("0" + d.getDate()).slice(-2) + " " + ("0" + d.getHours()).slice(-2) + ":" + ("0" + d.getMinutes()).slice(-2); }
+  function loadMyFeedback() {
+    var box = document.getElementById("fb-mine"); if (!box || !SB) return;
+    SB.rpc("my_feedback", { lim: 20 }).then(function (res) {
+      if (!document.getElementById("fb-mine")) return;
+      if (res.error) { box.innerHTML = '<p class="sub-msg bad">' + esc(/my_feedback/.test(res.error.message || "") ? "データベースの準備がまだです(db/feedback.sql の実行が必要です)。" : dbErr(res.error)) + "</p>"; return; }
+      var rows = res.data || [];
+      box.innerHTML = rows.length ? rows.map(function (f) {
+        return '<article class="fb-item"><div class="fb-meta"><span class="tag dim">' + esc(FB_JP[f.kind] || f.kind) + '</span><span class="mono muted">' + fbWhen(f.at) + "</span>" +
+          (f.status === "done" ? '<span class="tag">対応済み</span>' : '<span class="tag dim">受け付けました</span>') + '</div><p class="fb-text">' + esc(f.body) + "</p>" +
+          (f.reply ? '<div class="fb-reply"><span class="mono gold">運営からの返事</span><p class="fb-text">' + esc(f.reply) + "</p></div>" : "") + "</article>";
+      }).join("") : '<p class="muted" style="font-size:14px">まだ送ったものはありません。</p>';
+    });
+  }
+  function sendFeedback() {
+    var f = document.querySelector('[data-form="fb"]'), msg = document.getElementById("fb-msg"), btn = f && f.querySelector('button[type="submit"]'); if (!f || !SB) return;
+    var kind = (f.querySelector('input[name="fb-kind"]:checked') || {}).value, body = document.getElementById("fb-body").value.trim(), pg = document.getElementById("fb-page");
+    msg.className = "sub-msg bad";
+    if (!kind) { msg.textContent = "種類を選んでください"; return; }
+    if (!body) { msg.textContent = "内容を書いてください"; document.getElementById("fb-body").focus(); return; }
+    btn.disabled = true; msg.className = "sub-msg"; msg.textContent = "送信中…";
+    SB.rpc("send_feedback", { p_kind: kind, p_body: body, p_page: pg && pg.checked ? S.fbFrom || "" : "" }).then(function (res) {
+      btn.disabled = false;
+      if (res.error) { msg.className = "sub-msg bad"; msg.textContent = /send_feedback/.test(res.error.message || "") ? "データベースの準備がまだです(db/feedback.sql の実行が必要です)。" : dbErr(res.error); return; }
+      S.fbDraft = ""; document.getElementById("fb-body").value = ""; document.getElementById("fb-count").textContent = "0 / 2000";
+      msg.className = "sub-msg ok"; msg.textContent = "送りました。ありがとうございます。"; loadMyFeedback();
+    });
+  }
+
   /* ---- editing a match you sent, within an hour ---- */
   function editLeft(created) { return Math.max(1, Math.ceil((new Date(created).getTime() + 3600e3 - Date.now()) / 60000)); }
   function itemLine(side, L, ids) {
@@ -1808,13 +1855,14 @@
     if (g) return acctHead("REVIEW", "承認と運営の作業", "REVIEW") + '<section class="section tight"><div class="wrap">' + g + "</div></section>";
     var tabs = [["rv-t-pending", "承認待ち", "PENDING"], ["rv-t-approved", "承認済み", "APPROVED"]];
     if (canManage()) tabs.push(["rv-t-members", "メンバー", "MEMBERS"]);
+    tabs.push(["rv-t-feedback", "ご意見", "FEEDBACK"]);
     tabs.push(["rv-t-log", "作業の記録", "LOG"]);
     if (canManage()) tabs.push(["rv-t-season", "シーズン", "SEASON"]);
     var cur = tabs.some(function (x) { return x[0] === S.rvtab; }) ? S.rvtab : "rv-t-pending";
     var P = function (id) { return 'role="tabpanel" id="' + id + '" aria-labelledby="tab-' + id + '"' + (id === cur ? "" : " hidden"); };
     return acctHead("REVIEW", "承認と運営の作業", "REVIEW") +
       '<section class="section tight" style="padding-top:0"><nav class="dtabs" aria-label="運営の作業"><div class="wrap" role="tablist" aria-label="運営の作業">' +
-      tabs.map(function (x) { var on = cur === x[0]; return '<button type="button" class="dtab dtab2" role="tab" id="tab-' + x[0] + '" aria-controls="' + x[0] + '" aria-selected="' + on + '" tabindex="' + (on ? 0 : -1) + '" data-action="tab" data-target="' + x[0] + '"><span class="mono">' + x[2] + "</span>" + x[1] + (x[0] === "rv-t-pending" ? '<b class="rv-badge num" id="rv-badge" hidden></b>' : "") + "</button>"; }).join("") + "</div></nav>" +
+      tabs.map(function (x) { var on = cur === x[0]; return '<button type="button" class="dtab dtab2" role="tab" id="tab-' + x[0] + '" aria-controls="' + x[0] + '" aria-selected="' + on + '" tabindex="' + (on ? 0 : -1) + '" data-action="tab" data-target="' + x[0] + '"><span class="mono">' + x[2] + "</span>" + x[1] + (x[0] === "rv-t-pending" ? '<b class="rv-badge num" id="rv-badge" hidden></b>' : x[0] === "rv-t-feedback" ? '<b class="rv-badge num" id="rv-fb-badge" hidden></b>' : "") + "</button>"; }).join("") + "</div></nav>" +
       '<div class="wrap" style="padding-top:40px">' +
       "<div " + P("rv-t-pending") + ">" + '<p class="muted" style="font-size:13px;margin-bottom:16px">内容が正しければ承認してください。承認した試合は15分ほどで集計に入ります。<br><span class="tag warn rv-flag">要確認</span> が付いた試合は、運営・管理者の <b>2人</b> が同じ判断をしたときに決まります(登録した本人は投票できません)。管理者は1人で確定することもできます。</p>' +
         '<div class="rv-bulk" id="rv-bulk" hidden><label class="rv-check"><input type="checkbox" id="rv-all"> すべて選ぶ</label><span id="rv-count" class="mono muted">0件を選択中</span>' +
@@ -1825,6 +1873,9 @@
         '<div id="rv-approved"><p class="muted">読み込み中…</p></div></div>' +
       (canManage() ? "<div " + P("rv-t-members") + ">" + '<p class="muted" style="font-size:13px;margin-bottom:16px">一般 = 承認が必要 / 信頼ユーザー = すぐ集計に入る(要確認の試合は除く) / 運営 = 承認と、一般・信頼ユーザーの切り替えができる / 管理者 = すべて' + (AUTH.role === "manager" ? "<br>運営が変えられるのは、一般と信頼ユーザーのあいだだけです。" : "") +
         '<br><b>登録停止</b> = ログインして見ることはできるが、試合を登録できない。<b>統計から外す</b> = 試合は残したまま、勝率などの集計に入れない(様子見に)。</p><div id="rv-members"><p class="muted">読み込み中…</p></div></div>' : "") +
+      "<div " + P("rv-t-feedback") + ">" + '<p class="muted" style="font-size:14px;margin-bottom:16px">サイトの「ご意見・ご要望」から届いたものです。対応したら「対応済みにする」を押してください。返事を書くと、送った人のページに表示されます(任意)。</p>' +
+        '<div class="fgroup" role="group" aria-label="状態で絞り込む">' + [["open", "未対応"], ["done", "対応済み"], ["all", "すべて"]].map(function (o) { return '<button type="button" class="chip" data-action="rv-fbf" data-f="' + o[0] + '" aria-pressed="' + ((S.fbF || "open") === o[0]) + '">' + o[1] + "</button>"; }).join("") + "</div>" +
+        '<div id="rv-fb" class="fb-staff"><p class="muted">読み込み中…</p></div></div>' +
       "<div " + P("rv-t-log") + ">" + '<p class="muted" style="font-size:13px;margin-bottom:16px">運営・管理者がしたことの記録です(1年分)。修正したものは「変更点」を開くと前後が見られます。</p>' +
         '<div class="fgroup" role="group" aria-label="記録の種類">' + LOG_KINDS.map(function (k) { return '<button type="button" class="chip" data-action="rv-logf" data-k="' + k[0] + '" aria-pressed="' + ((S.logKind || "all") === k[0]) + '">' + k[1] + "</button>"; }).join("") + "</div>" +
         '<div id="rv-log" class="rv-log"><p class="muted">読み込み中…</p></div><button class="chip" type="button" data-action="rv-log-more" id="rv-log-more" hidden style="margin-top:16px">もっと見る</button></div>' +
@@ -1834,7 +1885,7 @@
   }
   var FLAG_JP = { dup: "同じ試合がもうある", kda: "KDAが極端", short: "5分未満の試合", old: "60日以上前の試合", burst: "1時間に20件超の登録" };
   var LOG_KINDS = [["all", "すべて", null], ["review", "承認・却下・投票", ["approve", "reject", "vote_ok", "vote_ng"]], ["fix", "修正・取り消し", ["edit", "unapprove"]],
-    ["member", "メンバー", ["role", "ban", "unban", "exclude", "include"]], ["content", "シーズン・記事", ["season", "hero_note", "tier", "patch_add", "patch_edit", "patch_delete", "gear_text"]]];
+    ["member", "メンバー", ["role", "ban", "unban", "exclude", "include"]], ["content", "シーズン・記事", ["season", "hero_note", "tier", "patch_add", "patch_edit", "patch_delete", "gear_text"]], ["feedback", "ご意見", ["feedback_done", "feedback_open"]]];
   function flagTags(f) { return (f || []).map(function (k) { return '<span class="tag warn rv-flag">要確認 · ' + esc(FLAG_JP[k] || k) + "</span>"; }).join(""); }
   function voteLine(m) {
     if (!m.flags || !m.flags.length) return "";
@@ -1855,7 +1906,7 @@
   }
   function loadReview() {
     loadSeason(function (v) { var rs = document.getElementById("rv-season"); if (rs && !rs.value) rs.value = v; });
-    loadPending(); loadApproved(); loadMembers(); S.logBefore = null; loadLog(true);
+    loadPending(); loadApproved(); loadMembers(); loadStaffFeedback(); S.logBefore = null; loadLog(true);
   }
   function loadPending() {
     var box = document.getElementById("rv-list"); if (!box || !SB) return;
@@ -1953,6 +2004,35 @@
       var q = document.getElementById("mem-q");
       q.oninput = function () { S.memQ = q.value; drawMembers(); };
       drawMembers();
+    });
+  }
+  function loadStaffFeedback() {
+    var box = document.getElementById("rv-fb"); if (!box || !SB) return;
+    SB.rpc("staff_feedback", { p_status: S.fbF || "open", lim: 100 }).then(function (res) {
+      if (!document.getElementById("rv-fb")) return;
+      if (res.error) { box.innerHTML = '<p class="sub-msg bad">' + esc(/staff_feedback/.test(res.error.message || "") ? "データベースの準備がまだです(db/feedback.sql の実行が必要です)。" : dbErr(res.error)) + "</p>"; return; }
+      var rows = res.data || [], open = rows.length ? Number(rows[0].open_count) : null, bd = document.getElementById("rv-fb-badge");
+      if (bd && open != null) { bd.hidden = !open; bd.textContent = open >= 100 ? "99+" : open; }
+      if (bd && open == null && (S.fbF || "open") === "open") bd.hidden = true;
+      box.innerHTML = rows.length ? rows.map(function (f) {
+        var done = f.status === "done";
+        return '<article class="fb-item' + (done ? " done" : "") + '" data-fb="' + f.id + '"><div class="fb-meta"><span class="tag ' + (f.kind === "bug" ? "warn" : "dim") + '">' + esc(FB_JP[f.kind] || f.kind) + '</span><span class="mono muted">' + fbWhen(f.at) + "</span>" +
+          "<span>" + esc(f.sender_name) + (f.sender_role ? ' <span class="tag dim me-thin">' + esc(ROLE_JP[f.sender_role] || f.sender_role) + "</span>" : "") + "</span>" +
+          (f.page ? '<a class="mono" href="' + esc(/^#[a-z0-9-]{1,80}$/.test(f.page) ? f.page : "#home") + '">' + esc(f.page) + "</a>" : "") +
+          (done ? '<span class="tag">対応済み' + (f.handler_name ? " · " + esc(f.handler_name) : "") + "</span>" : "") + '</div><p class="fb-text">' + esc(f.body) + "</p>" +
+          (done ? (f.reply ? '<div class="fb-reply"><span class="mono gold">返事</span><p class="fb-text">' + esc(f.reply) + "</p></div>" : "") +
+            '<div class="sub-actions"><button class="chip" type="button" data-action="fb-set" data-st="open">未対応に戻す</button><span class="sub-msg" role="status" aria-live="polite"></span></div>'
+          : '<label class="sr" for="fb-r-' + f.id + '">送った人への返事(任意)</label><textarea id="fb-r-' + f.id + '" class="fb-body fb-r" rows="2" maxlength="1000" placeholder="送った人への返事(任意・送った人だけが見られます)"></textarea>' +
+            '<div class="sub-actions"><button class="chip on-gold" type="button" data-action="fb-set" data-st="done">対応済みにする</button><span class="sub-msg" role="status" aria-live="polite"></span></div>') + "</article>";
+      }).join("") : '<p class="muted" style="font-size:14px">' + ((S.fbF || "open") === "open" ? "未対応のご意見はありません。" : "まだありません。") + "</p>";
+    });
+  }
+  function fbSet(btn) {
+    var art = btn.closest("[data-fb]"), id = Number(art.getAttribute("data-fb")), st = btn.getAttribute("data-st"), r = art.querySelector(".fb-r"), msg = art.querySelector(".sub-msg");
+    btn.disabled = true; msg.className = "sub-msg"; msg.textContent = "登録中…";
+    SB.rpc("set_feedback", { p_id: id, p_status: st, p_reply: r ? r.value.trim() : null }).then(function (res) {
+      if (res.error) { btn.disabled = false; msg.className = "sub-msg bad"; msg.textContent = dbErr(res.error); return; }
+      loadStaffFeedback(); S.logBefore = null; loadLog(true);
     });
   }
   /* a change in the members table is only a draft until 登録 is pressed */
@@ -2091,6 +2171,8 @@
         txt = '<a href="' + (d.kind === "item" ? "#item-" + esc(d.id) : d.kind === "spell" ? "#spells" : "#emblem") + '">' + esc(go ? go.name : d.id) + "</a> の" + esc(String(gf).replace(/\(.*$/, "")) + "を" + (d.after == null ? "元の文に戻した" : "書き換え");
         more = '<details class="rv-diff"><summary>変更点</summary><div class="rv-note-diff"><p class="was">' + (esc(d.before || "") || "(元の文)") + "</p><p>" + (esc(d.after || "") || "(元の文)") + "</p></div></details>";
         break;
+      case "feedback_done": txt = (who || "退会した人") + " のご意見(" + esc(FB_JP[d.kind] || d.kind || "") + ")を対応済みに" + (d.reply ? ' <span class="muted">— 返事: ' + esc(d.reply) + "</span>" : ""); break;
+      case "feedback_open": txt = (who || "退会した人") + " のご意見(" + esc(FB_JP[d.kind] || d.kind || "") + ")を未対応に戻した"; break;
       default: txt = esc(e.action);
     }
     return '<div class="rv-log-row"><span class="mono muted num">' + hm + '</span><span class="rv-log-who">' + esc(e.actor_name || "?") + (e.actor_role ? ' <span class="tag dim me-thin">' + esc(ROLE_JP[e.actor_role] || e.actor_role) + "</span>" : "") + '</span><span class="rv-log-what"><span>' + txt + "</span>" + more + "</span></div>";
@@ -2424,11 +2506,11 @@
   /* phones: the main pages sit in a bar at the bottom of the screen; the rest are under メニュー */
   function tabBar(cur) {
     var T = [["home", "HOME", IC.home], ["champions", "ヒーロー", IC.heroes], ["matchup", "対面", IC.versus], ["me", "マイページ", IC.me]];
-    var inMore = ["equipment", "patch", "lore", "roulette", "account"].indexOf(cur) >= 0;
+    var inMore = ["equipment", "patch", "lore", "roulette", "account", "feedback"].indexOf(cur) >= 0;
     return '<nav class="tabbar" aria-label="メインメニュー">' + T.map(function (x) { return '<a href="#' + x[0] + '"' + (cur === x[0] ? ' aria-current="page"' : "") + ">" + x[2] + "<span>" + x[1] + "</span></a>"; }).join("") +
       '<button type="button" data-action="more"' + (inMore ? ' class="on"' : "") + ' aria-expanded="false" aria-controls="more-sheet">' + IC.menu + "<span>メニュー</span></button></nav>" +
       '<div class="more-sheet" id="more-sheet" hidden><div class="more-back" data-action="more-close"></div><div class="more-panel" role="dialog" aria-label="ほかのページ">' +
-      [["equipment", "EQUIPMENT", "装備・エンブレム・スペル"], ["patch", "PATCH & META", "パッチとTier List"], ["lore", "LORE ARCHIVE", "世界観"], ["roulette", "ROULETTE", "ヒーロールーレット"]].map(function (x) {
+      [["equipment", "EQUIPMENT", "装備・エンブレム・スペル"], ["patch", "PATCH & META", "パッチとTier List"], ["lore", "LORE ARCHIVE", "世界観"], ["roulette", "ROULETTE", "ヒーロールーレット"], ["feedback", "FEEDBACK", "ご意見・ご要望"]].map(function (x) {
         return '<a href="#' + x[0] + '"' + (cur === x[0] ? ' aria-current="page"' : "") + '><span class="mono gold">' + x[1] + '</span><span class="mincho">' + x[2] + "</span>" + IC.arrow + "</a>"; }).join("") +
       '<button type="button" class="more-search" data-action="open-search">' + IC.search + "<span>サイト内を検索</span></button></div></div>";
   }
@@ -2463,7 +2545,7 @@
   function footer() {
     return '<footer class="site-footer"><div class="wrap top"><div style="display:flex;flex-direction:column;gap:16px"><a class="logo" href="#home">' + LOGO + "<span>VEIL</span></a>" +
       '<p class="disclaimer">本サイトはMoontonとは無関係の非公式ファンサイトです。Mobile Legends: Bang Bang、ヒーロー名、アートワーク等の権利はMoontonに帰属します。勝率などの数値は、VEILに登録されて承認された試合記録から集計しています。</p></div>' +
-      '<div class="cols"><div class="col"><span class="mono gold">DATABASE</span><a href="#me">マイページ</a><a href="#champions">キャラクター図鑑</a><a href="#roulette">ヒーロールーレット</a><a href="#equipment">装備一覧</a><a href="#matchup">対面攻略</a><a href="#patch">パッチ・メタ</a></div><div class="col"><span class="mono gold">ARCHIVE</span><a href="#lore">世界観</a><a href="#home">HOME</a></div></div></div>' +
+      '<div class="cols"><div class="col"><span class="mono gold">DATABASE</span><a href="#me">マイページ</a><a href="#champions">キャラクター図鑑</a><a href="#roulette">ヒーロールーレット</a><a href="#equipment">装備一覧</a><a href="#matchup">対面攻略</a><a href="#patch">パッチ・メタ</a></div><div class="col"><span class="mono gold">ARCHIVE</span><a href="#lore">世界観</a><a href="#home">HOME</a></div><div class="col"><span class="mono gold">CONTACT</span><a href="#feedback">ご意見・ご要望</a></div></div></div>' +
       '<div class="wrap bottom"><span class="mono muted">EVERY BATTLE LEAVES A TRACE.</span><span class="mono muted"><button class="fx-toggle mono" type="button" data-action="fx-toggle">' + (fxPref() === "off" ? "演出: オフ(オンにする)" : fxPref() === "lite" ? "演出: 軽量(元に戻す)" : "演出: オン(オフにする)") + "</button> · VEIL · PROTOTYPE v0.2</span></div></footer>";
   }
 
@@ -2478,6 +2560,7 @@
     if (h === "account") return { nav: "account", html: viewAccount(), title: "ACCOUNT — VEIL" };
     if (h === "submit") return { nav: "account", html: viewSubmit(), title: "SUBMIT — VEIL", after: loadMySubs };
     if (h === "review") return { nav: "account", html: viewReview(), title: "REVIEW — VEIL", after: loadReview };
+    if (h === "feedback") return { nav: "feedback", html: viewFeedback(), title: "FEEDBACK — VEIL", after: loadMyFeedback };
     if ((m = h.match(/^champion-([a-z]+)$/))) return { nav: "champions", html: viewChampion(m[1]) };
     if (h === "equipment") return { nav: "equipment", html: viewEquipment() };
     if (h === "emblem") return { nav: "equipment", html: viewEmblem(), title: "EMBLEM — VEIL" };
@@ -2556,6 +2639,8 @@
     if (act === "rv-logf") { S.logKind = t.getAttribute("data-k"); document.querySelectorAll('[data-action="rv-logf"]').forEach(function (b) { b.setAttribute("aria-pressed", String(b === t)); }); loadLog(true); return; }
     if (act === "rv-log-more") { loadLog(false); return; }
     if (act === "lane-swap") { laneSwapTap(t); return; }
+    if (act === "fb-set") { fbSet(t); return; }
+    if (act === "rv-fbf") { S.fbF = t.getAttribute("data-f"); document.querySelectorAll('[data-action="rv-fbf"]').forEach(function (b) { b.setAttribute("aria-pressed", String(b === t)); }); loadStaffFeedback(); return; }
     if (act === "mem-save") { memSave(t); return; }
     if (act === "mem-undo") { if (S.memDraft) delete S.memDraft[t.getAttribute("data-uid")]; drawMembers(); return; }
     if (act === "tier-save") { var ts = t.parentNode.querySelector(".hn-tier"); if (ts) tierSave(ts, t); return; }
@@ -2659,6 +2744,7 @@
     else if (act === "close-search") { closeSearch(); }
   });
   document.addEventListener("input", function (ev) {
+    if (ev.target.id === "fb-body") { S.fbDraft = ev.target.value; var fc = document.getElementById("fb-count"); if (fc) fc.textContent = ev.target.value.length + " / 2000"; return; }
     var t = ev.target;
     if (t.getAttribute("data-input") === "cf-q") { S.cf.q = t.value; document.getElementById("champ-grid").innerHTML = champGrid(); }
     if (t.getAttribute("data-input") === "it-q") { S.itf.q = t.value; document.getElementById("item-grid").innerHTML = itemGrid(); }
@@ -2677,6 +2763,7 @@
     if (t.classList && (t.classList.contains("rv-ban") || t.classList.contains("rv-excl") || t.classList.contains("rv-role"))) { memDraft(t.closest("tr")); return; }
     if (t.id && /^ra-to-/.test(t.id)) return;
     if (t.classList && t.classList.contains("hn-tier")) { tierDirty(t); return; }
+    if (t.name === "fb-kind") { S.fbKind = t.value; document.querySelectorAll(".fb-kind").forEach(function (l) { l.classList.toggle("on", l.contains(t)); }); return; }
     if (b === "it-sort") { S.itf.sort = t.value; document.getElementById("item-grid").innerHTML = itemGrid(); }
     if (b === "q-you" || b === "l-you") S.lab.you = t.value;
     if (b === "q-enemy" || b === "l-enemy") S.lab.enemy = t.value;
@@ -2691,6 +2778,7 @@
     if (ev.target.id === "sub-form") { ev.preventDefault(); sendForm(); return; }
     var f = ev.target.getAttribute("data-form"); if (!f) return;
     ev.preventDefault();
+    if (f === "fb") { sendFeedback(); return; }
     if (f === "rv-search") { S.rvQ = document.getElementById("rv-q").value.trim(); loadApproved(); return; }
     if (f === "patch") { patchSave(ev.target); return; }
     var p = f === "quick" ? "q-" : "l-";
@@ -2709,6 +2797,7 @@
       else if (id === "rv-t-approved") loadApproved();
       else if (id === "rv-t-members") loadMembers();
       else if (id === "rv-t-log") loadLog(true);
+      else if (id === "rv-t-feedback") loadStaffFeedback();
       else if (id === "rv-t-season") loadSeason(function (v) { var rs = document.getElementById("rv-season"); if (rs && document.activeElement !== rs) rs.value = v; });
     }, 250);
   }
@@ -2770,7 +2859,9 @@
   /* ---------------- boot ---------------- */
   if (dbOn()) dbCacheLoad();              /* last DB statistics kept in this browser: shown at once, then checked for updates */
   var tp0 = topPairs(1)[0]; if (tp0) S.lab = { you: tp0.y, enemy: tp0.e, lane: tp0.lane };
-  window.addEventListener("hashchange", function () { closeSearch(); S.artSel = {}; render(); });
+  window.addEventListener("hashchange", function (e) {
+    var from = String(e.oldURL || "").split("#")[1] || ""; if (from !== "feedback") S.fbFrom = from ? "#" + from : "";
+    closeSearch(); S.artSel = {}; render(); });
   render();
   if (dbOn()) { try { dbStats(); loadContent(); } catch (e) {} }
   var curtain = document.getElementById("curtain");
