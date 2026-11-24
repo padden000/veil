@@ -12,7 +12,7 @@
     rows: [318, 468, 620, 770, 920],                         /* y of each player row (portrait centre) */
     portrait: { ally: 400, enemy: 2152, r: 58 },             /* portrait centre x, half size */
     face: [26, 18, 70, 70],                                  /* x, y, w, h inside the portrait crop: the face, no flag / level */
-    items: { ally: [517, 594, 670, 748, 825, 902], enemy: [1652, 1729, 1806, 1884, 1962, 2040], dy: 25, r: 31 },
+    items: { ally: [517, 594, 670, 748, 825, 902], enemy: [1652, 1729, 1806, 1884, 1962, 2040], dy: 27, r: 31 },   /* dy 27: re-measured 2026-11-24, 25 sat 2 px high */
     kda: { ally: [812, 863, 915], enemy: [1640, 1692, 1744], half: 25, top: -58, bottom: -12 },
     band: { ally: [10, 1270], top: -70, bottom: 75 },        /* row background, to find the highlighted (own) row */
     battle: [245, 1143, 560, 1177],                          /* digits after 「戦闘番号」 */
@@ -99,6 +99,7 @@
     var list = Object.keys(by).map(function (k) { return { label: k, score: by[k] }; }).sort(function (a, b) { return b.score - a.score; });
     return list;
   }
+  var JIT = [-3, 0, 3], JIT_R = [0.94, 1, 1.06];
   var TH = { hero: [0.82, 0.04], item: [0.72, 0.05], kda: [0.75, 0.05], bid: [0.75, 0.05], time: [0.75, 0.05] };
 
   /* boots badge (top right of an item): a mark in a small dark ring. Foot mark = ROAM, hunt (beast) mark = JUNGLE.
@@ -196,6 +197,13 @@
           var ir = L.items.r, ic = crop(src, G.X(ix - ir), G.Y(ry + L.items.dy - ir), 2 * ir * G.s, 2 * ir * G.s, 2 * ir, 2 * ir);
           if (std(ic) < 22) return null;                   /* empty slot */
           var d = decide("item", vecOf(ic, true, true)), bd = badgeAt(src, G, ix, ry + L.items.dy);
+          /* not sure: the icon may sit a few pixels off (other phones, a slightly scaled screenshot), so look again around
+             the spot at a few offsets and sizes and keep the best; the same thresholds still apply */
+          if (!d.label) JIT.forEach(function (ox) { JIT.forEach(function (oy) { JIT_R.forEach(function (rs) {
+            if (!ox && !oy && rs === 1) return;
+            var rr = ir * rs, jc = crop(src, G.X(ix + ox - rr), G.Y(ry + L.items.dy + oy - rr), 2 * rr * G.s, 2 * rr * G.s, 2 * ir, 2 * ir);
+            var dj = decide("item", vecOf(jc, true, true)); if (dj.score > d.score) { d = dj; ic = jc; }
+          }); }); });
           return { img: crop(ic, 0, 0, ic.width, ic.height, 32, 32).toDataURL("image/webp", .92), id: d.label, score: d.score, alts: d.alts, badge: bd };
         }).filter(Boolean);
         var kda = L.kda[side].map(function (kx) {
