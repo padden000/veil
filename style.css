@@ -650,7 +650,17 @@ button.mlog-h:focus-visible { outline: 1px solid var(--gold); outline-offset: 1p
 .sub-team { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
 .sub-team small { font-family: var(--sans); font-size: 12px; margin-left: 8px; }
 .sub-row { display: grid; grid-template-columns: 62px 44px minmax(0, 1fr) 62px 156px; align-items: center; gap: 10px; }
-.sub-lane { font-size: 10px; letter-spacing: .14em; color: var(--sub); }
+.sub-lane { font-size: 10px; letter-spacing: .14em; color: var(--sub); display: inline-flex; align-items: center; justify-content: space-between; gap: 4px; min-height: 36px; padding: 0 6px 0 8px; background: none; border: 1px solid var(--line); cursor: pointer; font-family: inherit; }
+.sub-lane i { font-style: normal; font-size: 11px; color: var(--dim, #6b6458); letter-spacing: 0; }
+.sub-lane:hover { border-color: rgba(185,154,104,.5); color: var(--text); }
+.sub-row.swap-from .sub-lane { border-color: var(--gold); color: #0b0b0d; background: var(--gold); }
+.sub-row.swap-from .sub-lane i { color: #0b0b0d; }
+.sub-row.swap-to .sub-lane { border-style: dashed; border-color: rgba(217,185,126,.7); color: var(--gold); animation: swapblink 1.2s ease-in-out infinite; }
+@keyframes swapblink { 50% { background: rgba(217,185,126,.12); } }
+.sub-row.swapped { animation: swapped .7s ease-out; }
+@keyframes swapped { from { background: rgba(217,185,126,.16); } to { background: transparent; } }
+.sub-swap-hint { font-size: 12px; margin: 0 0 12px; }
+@media (prefers-reduced-motion: reduce) { .sub-row.swap-to .sub-lane, .sub-row.swapped { animation: none; } }
 .sub-face .portrait.sm { width: 40px; height: 40px; }
 .sub-face > .portrait.sm:empty { border: 1px dashed var(--line); background: transparent; }
 .sub-hero { width: 100%; min-width: 0; }
@@ -675,7 +685,8 @@ button.mlog-h:focus-visible { outline: 1px solid var(--gold); outline-offset: 1p
 .rv-row.rv-done { opacity: .55; }
 .mlog-row.sub-mine, .mlog-row.rv-row { grid-template-columns: 190px auto 28px auto; }
 @media (max-width: 760px) {
-  .sub-row { grid-template-columns: 50px 40px minmax(0, 1fr) 54px; }
+  .sub-row { grid-template-columns: 60px 40px minmax(0, 1fr) 54px; }
+  .sub-lane { letter-spacing: .02em; padding: 0 4px 0 5px; gap: 2px; font-size: 9.5px; }
   .sub-row .sub-kda { grid-column: 3 / 5; }
   .sub-row .sub-me-pad { display: none; }
   .sub-row:has(.sub-me-pad) { grid-template-columns: 50px 40px minmax(0, 1fr); }

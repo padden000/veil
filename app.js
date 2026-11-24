@@ -1476,9 +1476,46 @@
   function heroDatalist() {
     return '<datalist id="hero-names">' + D.champions.slice().sort(function (a, b) { return a.name.localeCompare(b.name, "ja"); }).map(function (c) { return '<option value="' + esc(c.name + " (" + c.en + ")") + '"></option>'; }).join("") + "</datalist>";
   }
+  /* swapping two lanes of the same team: hero, KDA, read items and the 自分 mark all move together */
+  function laneSwapTap(btn) {
+    var row = btn.closest(".sub-row"), f = document.getElementById("sub-form"); if (!row || !f) return;
+    var cur = f.querySelector(".sub-row.swap-from");
+    var clear = function () { f.querySelectorAll(".sub-row").forEach(function (r) { r.classList.remove("swap-from", "swap-to"); var b = r.querySelector(".sub-lane"); if (b) b.setAttribute("aria-pressed", "false"); }); };
+    if (!cur) {
+      clear(); row.classList.add("swap-from"); btn.setAttribute("aria-pressed", "true");
+      f.querySelectorAll('.sub-row[data-side="' + row.getAttribute("data-side") + '"]').forEach(function (r) { if (r !== row) r.classList.add("swap-to"); });
+      return;
+    }
+    if (cur === row || cur.getAttribute("data-side") !== row.getAttribute("data-side")) { clear(); if (cur !== row) laneSwapTap(btn); return; }
+    swapRows(cur, row); clear();
+    [cur, row].forEach(function (r) { r.classList.remove("swapped"); void r.offsetWidth; r.classList.add("swapped"); });
+    btn.focus();
+  }
+  function swapRows(a, b) {
+    var side = a.getAttribute("data-side"), La = a.getAttribute("data-lane"), Lb = b.getAttribute("data-lane");
+    var take = function (r) {
+      var box = r.querySelector(".sub-items");
+      return { hero: r.querySelector(".sub-hero").value, kda: [].map.call(r.querySelectorAll("[data-kda]"), function (x) { return x.value; }),
+        items: box.innerHTML, itemsHidden: box.hidden, sel: [].map.call(box.querySelectorAll("select"), function (s) { return s.value; }),
+        me: !!(r.querySelector('input[name="f-me"]') || {}).checked };
+    };
+    var put = function (r, v, from, to) {
+      var inp = r.querySelector(".sub-hero"); inp.value = v.hero; subFace(inp);
+      r.querySelectorAll("[data-kda]").forEach(function (x, j) { x.value = v.kda[j]; });
+      var box = r.querySelector(".sub-items"); box.innerHTML = v.items.split(" " + from + " の装備").join(" " + to + " の装備"); box.hidden = v.itemsHidden;
+      box.querySelectorAll("select").forEach(function (s, j) { s.value = v.sel[j]; });
+      var me = r.querySelector('input[name="f-me"]'); if (me) me.checked = v.me;
+    };
+    var va = take(a), vb = take(b); put(a, vb, Lb, La); put(b, va, La, Lb);
+    if (S.rec && S.rec.map) {
+      var m = S.rec.map, ra = m[side + ":" + La], rb = m[side + ":" + Lb];
+      if (rb) { m[side + ":" + La] = rb; rb.lane = La; } else delete m[side + ":" + La];
+      if (ra) { m[side + ":" + Lb] = ra; ra.lane = Lb; } else delete m[side + ":" + Lb];
+    }
+  }
   function subRow(side, L) {
     var own = side === "ally", id = "f-" + side + "-" + L;
-    return '<div class="sub-row" data-side="' + side + '" data-lane="' + L + '"><span class="mono sub-lane">' + L + '</span><span class="sub-face" id="' + id + '-face"><span class="portrait sm"></span></span>' +
+    return '<div class="sub-row" data-side="' + side + '" data-lane="' + L + '"><button type="button" class="mono sub-lane" data-action="lane-swap" aria-pressed="false" title="押してから、入れ替えたいレーンを押すと中身が入れ替わります" aria-label="' + (own ? "味方" : "敵") + "の" + L + '(押すとレーンを入れ替え)">' + L + '<i aria-hidden="true">⇅</i></button><span class="sub-face" id="' + id + '-face"><span class="portrait sm"></span></span>' +
       '<label class="sr" for="' + id + '">' + (own ? "味方" : "敵") + "の" + L + '</label><input id="' + id + '" class="sub-hero" list="hero-names" autocomplete="off" placeholder="ヒーロー名" data-hero-input="' + id + '">' +
       (own ? '<label class="sub-me" title="自分が使ったヒーロー"><input type="radio" name="f-me" value="' + L + '"><span>自分</span></label>' : '<span class="sub-me-pad"></span>') +
       '<span class="sub-kda" role="group" aria-label="' + (own ? "味方" : "敵") + "の" + L + 'のKDA">' + ["K", "D", "A"].map(function (x) { return '<input type="number" inputmode="numeric" min="0" max="99" placeholder="' + x + '" aria-label="' + x + '" data-kda="' + x + '">'; }).join("") + "</span><div class=\"sub-items\" id=\"" + id + "-items\" hidden></div></div>";
@@ -1505,7 +1542,7 @@
             : '<div class="sub-field"><span class="mono">シーズン</span><span id="f-season-now" class="serif num" style="font-size:22px;min-height:42px;display:flex;align-items:center">' + esc(S.curSeason || "—") + '</span><span class="muted" style="font-size:11px">運営が設定した今のシーズンで登録されます</span></div>') +
         "</div>" +
         '<fieldset class="sub-res"><legend class="mono">結果(自分のチーム)</legend><label><input type="radio" name="f-win" value="1"><span>WIN 勝ち</span></label><label><input type="radio" name="f-win" value="0"><span>LOSE 負け</span></label></fieldset>' +
-        '<div class="sub-teams"><div class="sub-team"><h3 class="subh" style="margin:0">味方 <small class="muted">自分を選んで、自分のKDAは必ず入れてください</small></h3>' + LANE_ORDER.map(function (L) { return subRow("ally", L); }).join("") + "</div>" +
+        '<p class="muted sub-swap-hint">レーンが違っていたら、レーン名を押してから入れ替えたいレーン名を押すと、ヒーロー・KDA・装備・「自分」がまとめて入れ替わります。</p><div class="sub-teams"><div class="sub-team"><h3 class="subh" style="margin:0">味方 <small class="muted">自分を選んで、自分のKDAは必ず入れてください</small></h3>' + LANE_ORDER.map(function (L) { return subRow("ally", L); }).join("") + "</div>" +
         '<div class="sub-team"><h3 class="subh" style="margin:0">敵 <small class="muted">KDAは分かれば</small></h3>' + LANE_ORDER.map(function (L) { return subRow("enemy", L); }).join("") + "</div></div>" +
         '<label class="sub-field wide"><span class="mono">メモ(任意 · 承認する人に伝えたいこと)</span><input id="f-note" maxlength="300"></label>' +
         '<div class="sub-actions"><button class="btn primary" type="submit" id="sub-send">登録する' + IC.arrow + '</button><span id="sub-msg" class="sub-msg" role="status" aria-live="polite"></span></div>' +
@@ -1622,7 +1659,7 @@
     var notes = [];
     notes.push("ヒーロー " + known + "/10 体、KDA " + kdaOk + "/10 人ぶんを読み取りました。");
     if (known < 10) notes.push("空いている欄は、下の「画面の顔」を見てヒーロー名を入れてください(入れた名前は、次からの読み取りに使われます)。");
-    notes.push("レーンは靴のマークとヒーローの種類から決めています。違っていたら直してください。");
+    notes.push("レーンは靴のマークとヒーローの種類から決めています。違っていたら、レーン名を2つ続けて押すと入れ替えられます。");
     if (!a.battle.sure) notes.push("戦闘番号は読み取れませんでした。");
     if (!a.layoutOk) notes.push("この画面サイズはまだ慣れていないので、位置がずれているかもしれません。");
     st.className = "sub-msg ok"; st.innerHTML = notes.map(esc).join("<br>");
@@ -2518,6 +2555,7 @@
     if (act === "rv-undo-cancel") { loadApproved(); return; }
     if (act === "rv-logf") { S.logKind = t.getAttribute("data-k"); document.querySelectorAll('[data-action="rv-logf"]').forEach(function (b) { b.setAttribute("aria-pressed", String(b === t)); }); loadLog(true); return; }
     if (act === "rv-log-more") { loadLog(false); return; }
+    if (act === "lane-swap") { laneSwapTap(t); return; }
     if (act === "mem-save") { memSave(t); return; }
     if (act === "mem-undo") { if (S.memDraft) delete S.memDraft[t.getAttribute("data-uid")]; drawMembers(); return; }
     if (act === "tier-save") { var ts = t.parentNode.querySelector(".hn-tier"); if (ts) tierSave(ts, t); return; }
@@ -2687,6 +2725,8 @@
     if (bar) { var hh = document.querySelector(".site-header").offsetHeight || 72, stuck = bar.getBoundingClientRect().top <= hh + 1; if (stuck) { var y = bar.parentNode.getBoundingClientRect().top + window.scrollY - hh; window.scrollTo(0, y); } }
   }
   document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape") { var sf = document.querySelector(".sub-row.swap-from"); if (sf) { document.querySelectorAll(".sub-row").forEach(function (r) { r.classList.remove("swap-from", "swap-to"); }); var sb = sf.querySelector(".sub-lane"); if (sb) sb.setAttribute("aria-pressed", "false"); return; } }
+
     var t = e.target; if (!t.classList || !t.classList.contains("dtab")) return;
     var tabs = Array.prototype.slice.call(document.querySelectorAll(".dtab")), i = tabs.indexOf(t), n = -1;
     if (e.key === "ArrowRight") n = (i + 1) % tabs.length; else if (e.key === "ArrowLeft") n = (i - 1 + tabs.length) % tabs.length; else if (e.key === "Home") n = 0; else if (e.key === "End") n = tabs.length - 1;
