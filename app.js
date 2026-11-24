@@ -2632,6 +2632,19 @@
   });
 
 
+  /* staff tabs fetch fresh data each time they are opened (the old list stays on screen until the new one arrives).
+     A short wait keeps arrow-key browsing through the tabs from sending a request per key press. */
+  var rvRefreshT = 0;
+  function rvRefresh(id) {
+    clearTimeout(rvRefreshT);
+    rvRefreshT = setTimeout(function () {
+      if (id === "rv-t-pending") loadPending();
+      else if (id === "rv-t-approved") loadApproved();
+      else if (id === "rv-t-members") loadMembers();
+      else if (id === "rv-t-log") loadLog(true);
+      else if (id === "rv-t-season") loadSeason(function (v) { var rs = document.getElementById("rv-season"); if (rs && document.activeElement !== rs) rs.value = v; });
+    }, 250);
+  }
   function selectTab(id, focus) {
     if (id.indexOf("me-") === 0) S.metab = id; else if (id.indexOf("rv-t-") === 0) S.rvtab = id; else S.dtab = id;
     document.querySelectorAll(".dtab").forEach(function (b) {
@@ -2640,6 +2653,7 @@
       if (on) { b.scrollIntoView({ block: "nearest", inline: "nearest" }); if (focus) b.focus(); }
     });
     document.querySelectorAll('[role="tabpanel"]').forEach(function (p) { p.hidden = p.id !== id; });
+    if (id.indexOf("rv-t-") === 0) rvRefresh(id);
     var bar = document.querySelector(".dtabs");
     if (bar) { var hh = document.querySelector(".site-header").offsetHeight || 72, stuck = bar.getBoundingClientRect().top <= hh + 1; if (stuck) { var y = bar.parentNode.getBoundingClientRect().top + window.scrollY - hh; window.scrollTo(0, y); } }
   }
